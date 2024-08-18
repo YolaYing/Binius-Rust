@@ -1,11 +1,7 @@
-use p3_util::reverse_bits;
-
-// use p3_util::{log2_strict_usize};
-// use ndarray::{Array, Array2, ArrayView2};
-// use ndarray::prelude::*;
 use crate::binary_field16::BinaryFieldElement16 as B16;
 use super::binary_field16::{int_to_bigbin, big_mul, uint16s_to_bits};
 use super::binary_ntt::extend;
+use std::convert::TryFrom;
 
 /** transfrom the evaluations into a specific matrix
 
@@ -58,14 +54,11 @@ pub fn pack_rows(evaluations: &[u8], row_count: usize, row_length: usize, packin
 }
 // similar logic as above, but return type is Vec<B16> instead of Vec<Vec<B16>>
 pub fn pack_row(evaluations: &[u8], row_length: usize, packing_factor: usize) -> Vec<B16> {
-    println!("row_length: {}, packing_factor: {}", row_length, packing_factor);
-    println!("evaluations: {:?}", evaluations);
     let mut packed_row = Vec::with_capacity(row_length / packing_factor);
     for j in 0..row_length / packing_factor {
         let flipped: Vec<u8>= evaluations[j * packing_factor / 8..(j + 1) * packing_factor / 8].iter().map(|&byte|byte.reverse_bits()).collect();
         packed_row.push(B16::new(u16::from_le_bytes(flipped.try_into().unwrap())));
     }
-    println!("packed_row: {:?}", packed_row);
     packed_row
 }
 
@@ -110,7 +103,6 @@ pub fn evaluation_tensor_product(eval_point: &Vec<u128>) -> Vec<Vec<u16>> {
         o = o.iter().zip(o_times_coord.iter()).map(|(x, y)| x.iter().zip(y.iter()).map(|(a, b)| a ^ b).collect()).collect();
         o.extend_from_slice(&o_times_coord);
     }
-    // println!("tensor product is {:?}", &o);
     o
 }
 
@@ -155,6 +147,77 @@ pub fn xor_along_axis(values: &[Vec<u16>], axis: usize) -> Vec<u16> {
     result
 }
 
+fn xor_along_axis_4d(values: &Vec<Vec<Vec<Vec<u16>>>>, axis: usize) -> Vec<Vec<Vec<u16>>> {
+    let mut result: Vec<Vec<Vec<u16>>> = Vec::new();
+    if axis == 0 {
+        for i in 0..values[0].len() {
+            let mut row = Vec::new();
+            for j in 0..values[0][0].len() {
+                let mut col = Vec::new();
+                for k in 0..values[0][0][0].len() {
+                    let mut res = values[0][i][j][k];
+                    for l in 1..values.len() {
+                        res ^= values[l][i][j][k];
+                    }
+                    col.push(res);
+                }
+                row.push(col);
+            }
+            result.push(row);
+        }
+    } else if axis == 1 {
+        for i in 0..values.len() {
+            let mut row = Vec::new();
+            for j in 0..values[0][0].len() {
+                let mut col = Vec::new();
+                for k in 0..values[0][0][0].len() {
+                    let mut res = values[i][0][j][k];
+                    for l in 1..values[0].len() {
+                        res ^= values[i][l][j][k];
+                    }
+                    col.push(res);
+                }
+                row.push(col);
+            }
+            result.push(row);
+        }
+    } else if axis == 2 {
+        for i in 0..values.len() {
+            let mut row = Vec::new();
+            for j in 0..values[0].len() {
+                let mut col = Vec::new();
+                for k in 0..values[0][0][0].len() {
+                    let mut res = values[i][j][0][k];
+                    for l in 1..values[0][0].len() {
+                        res ^= values[i][j][l][k];
+                    }
+                    col.push(res);
+                }
+                row.push(col);
+            }
+            result.push(row);
+        }
+    } else if axis == 3 {
+        for i in 0..values.len() {
+            let mut row = Vec::new();
+            for j in 0..values[0].len() {
+                let mut col = Vec::new();
+                for k in 0..values[0][0].len() {
+                    let mut res = values[i][j][k][0];
+                    for l in 1..values[0][0][0].len() {
+                        res ^= values[i][j][k][l];
+                    }
+                    col.push(res);
+                }
+                row.push(col);
+            }
+        result.push(row);
+        }
+    } else {
+        panic!("Unsupported axis");
+    }
+    result
+}
 /** transpose the bits
 
 ragarding the input as bits, transpose the bits
@@ -230,28 +293,136 @@ pub fn computed_tprimes(rows_as_bits_transpose: &Vec<Vec<u8>>, row_combination: 
     t_prime
 }
 
+// /** transpose the 3D matrix
+
+// similar to np.transpose(column_bits, (0,2,1)) in python,
+//     swaps the rows and columns of each 2D array within the 3D array, effectively turning rows into columns and vice versa.
+//  */
+// pub fn transpose_3d(matrix: &Vec<Vec<Vec<u8>>>) -> Vec<Vec<Vec<u8>>> {
+//     let dim0 = matrix.len(); // Number of matrices
+//     let dim1 = matrix[0].len(); // Number of rows in each matrix
+//     let dim2 = matrix[0][0].len(); // Number of columns in each matrix
+
+//     // Initialize the transposed 3D matrix with zeros
+//     let mut transposed = vec![vec![vec![0; dim1]; dim2]; dim0];
+
+//     for i in 0..dim0 {
+//         for j in 0..dim1 {
+//             for k in 0..dim2 {
+//                 transposed[i][k][j] = matrix[i][j][k];
+//             }
+//         }
+//     }
+
+//     transposed
+// }
 /** transpose the 3D matrix
 
 similar to np.transpose(column_bits, (0,2,1)) in python,
     swaps the rows and columns of each 2D array within the 3D array, effectively turning rows into columns and vice versa.
  */
-pub fn transpose_3d(matrix: &Vec<Vec<Vec<u8>>>) -> Vec<Vec<Vec<u8>>> {
+pub fn transpose_3d(matrix: &Vec<Vec<Vec<u8>>>, order: (usize, usize, usize)) -> Vec<Vec<Vec<u8>>> {
     let dim0 = matrix.len(); // Number of matrices
     let dim1 = matrix[0].len(); // Number of rows in each matrix
     let dim2 = matrix[0][0].len(); // Number of columns in each matrix
 
+    let (new_dim0, new_dim1, new_dim2) = match order {
+        (0, 2, 1) => (dim0, dim2, dim1),
+        (1, 2, 0) => (dim1, dim2, dim0),
+        _ => panic!("Unsupported transpose order"),
+    };
+
     // Initialize the transposed 3D matrix with zeros
-    let mut transposed = vec![vec![vec![0; dim1]; dim2]; dim0];
+    let mut transposed = vec![vec![vec![0; new_dim2]; new_dim1]; new_dim0];
 
     for i in 0..dim0 {
         for j in 0..dim1 {
             for k in 0..dim2 {
-                transposed[i][k][j] = matrix[i][j][k];
+                match order {
+                    (0, 2, 1) => transposed[i][k][j] = matrix[i][j][k],
+                    (1, 2, 0) => transposed[j][k][i] = matrix[i][j][k],
+                    _ => unreachable!(),
+                }
             }
         }
     }
 
     transposed
+}
+
+
+
+
+/** Mutisubset sum
+
+Given a list of N objects, and a list of length-N bitvectors representing subsets of those objects, 
+    compute the xor-sum of each subset. Uses the main subroutine of Pippenger-style algorithms, see: https://ethresear.ch/t/7238
+
+Args:
+    values: the values(row_combination, Vec<Vec<u16>)
+    bits: the bits(transposed_column_bits, Vec<Vec<Vec<u8>>)
+*/
+pub fn multisubset(values: &Vec<Vec<u16>>, bits: &Vec<Vec<Vec<u8>>>) -> Vec<Vec<Vec<u16>>> {
+
+    let GROUPING = 4;
+    let mut subsets = vec![vec![vec![0u16; values[0].len()]; 16]; values.len() / GROUPING];
+    
+    for i in 0..GROUPING {
+        for j in (0..values.len()).step_by(GROUPING) {
+            subsets[j/GROUPING][1<<i] = values[j + i].clone();
+        }
+    }
+
+    // generate the subsets
+    let mut top_p_of_2 = 2;
+    for i in 3..1<<GROUPING {
+        if (i & (i-1)) == 0 {
+            top_p_of_2 = i;
+        } else {
+            for j in (0..values.len()).step_by(GROUPING) {
+                for k in 0..values[0].len() {
+                    subsets[j/GROUPING][i][k] = subsets[j/GROUPING][top_p_of_2][k] ^ subsets[j/GROUPING][i - top_p_of_2][k];
+                }
+            }
+        }
+    }
+
+    // use bits to generate the index_columns, and then use the index_columns to select the elements from subsets
+    let index_columns: Vec<Vec<Vec<u8>>>= bits.iter()
+        .map(|matrix| {
+            matrix.iter()
+                .map(|row| {
+                    row.chunks(4)
+                        .map(|chunk| {
+                            chunk.iter().rev().fold(0, |acc, &bit| (acc << 1) | bit)
+                        })
+                        .collect()
+                })
+                .collect()
+        })
+        .collect();
+
+    // use the index_columns to select the elements from subsets
+    let selected_elements: Vec<Vec<Vec<Vec<u16>>>> = index_columns
+        .iter()
+        .map(|outer| {
+            outer
+                .iter()
+                .map(|inner| {
+                    inner
+                        .iter()
+                        .enumerate()
+                        .map(|(i, &index)| subsets[i][index as usize].clone())
+                        .collect()
+                })
+                .collect()
+        })
+        .collect();
+    
+    // XOR along axis 3
+    let o = xor_along_axis_4d(&selected_elements, 2);
+    o
+    
 }
 
 

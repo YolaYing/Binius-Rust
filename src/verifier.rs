@@ -2,11 +2,13 @@ const EXPANSION_FACTOR: usize = 4;
 const NUM_CHALLENGES: usize = 2;
 const PACKING_FACTOR: usize = 16;
 
+use sha2::digest::typenum::uint;
+
 use super::prover::Proof;
 use super::utils::{
     choose_row_length_and_count, transpose_bits, extend_rows, 
     evaluation_tensor_product, computed_tprimes, pack_row, 
-    xor_along_axis, transpose_3d};
+    xor_along_axis, transpose_3d, multisubset};
 use super::challenger::get_challenges; 
 use super::merkle_tree::verify_branch;
 use super::binary_field16::{uint16s_to_bits,uint16_to_bit, big_mul, BinaryFieldElement16};
@@ -54,17 +56,24 @@ fn verify_optimized_binius_proof(proof:Proof) -> bool {
     // Each column is a vector of row_count uint16's. Convert each uint16 into bits
     let column_bits: Vec<Vec<Vec<u8>>>= columns.iter().map(|col| col.iter().map(|uint16| uint16_to_bit(uint16)).collect()).collect();
     // Take the same linear combination the prover used to compute t_prime, and apply it to the columns of bits.
-    let transposed_column_bits = transpose_3d(&column_bits);
-    let computed_tprimes = computed_tprimes(&transposed_column_bits, &row_combination);
-    println!("!!computed_tprimes: {:?}", computed_tprimes);
-    // Convert the computed t_prime rows into bits
-    let computed_tprime_bits: Vec<Vec<u8>>= computed_tprimes.iter().map(|row| uint16s_to_bits(row)).collect();
-    
+    let transposed_column_bits = transpose_3d(&column_bits, (0, 2, 1));
+    let computed_tprimes = multisubset(&row_combination, &transposed_column_bits);
+    // Turn the computed tprimes into bits using uint16s_to_bits
+    let computed_tprime_bits: Vec<Vec<Vec<u8>>> = computed_tprimes.iter()
+        .map(|row| row.iter()
+            .map(|uint16| uint16s_to_bits(uint16))
+            .collect())
+        .collect();
+
     // Convert our FFT-extended t_prime rows into bits
-    // step 1: use challenge to select columns, only select not use unit16s_to_bits
-    let extended_t_prime_bits: Vec<Vec<Vec<u8>>> = challenges.iter().map(|&challenge| extended_t_prime_columns[challenge as usize].iter().map(|uint16| uint16_to_bit(uint16)).collect()).collect();
+    // step 1: use challenge to select columns, and convert to bits
+    let extended_t_prime_columns_slices: Vec<Vec<Vec<BinaryFieldElement16>>> = extended_t_prime_columns.iter().map(|row| challenges.iter().map(|&c| vec![row[c as usize]]).collect()).collect();
+    let extended_t_prime_bits: Vec<Vec<Vec<u8>>> = extended_t_prime_columns_slices.iter().map(|row| row.iter().map(|uint16| uint16s_to_bits(uint16)).collect()).collect();
+    // step 2: transpose the bits
+    let extended_t_prime_bits_transpose = transpose_3d(&extended_t_prime_bits, (1, 2, 0)); 
+ 
     // The bits of the t_prime extension should equal the bits of the row linear combination of the column bits
-    assert_eq!(computed_tprime_bits, extended_t_prime_bits);
+    assert_eq!(computed_tprime_bits, extended_t_prime_bits_transpose);
 
     // Compute the evaluation
     let col_combination = evaluation_tensor_product(&evaluation_point[..log_row_length].to_vec());

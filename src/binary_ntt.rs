@@ -36,7 +36,6 @@ Args:
  */
 pub fn get_Wi_eval(dim: usize, pt: u16, wi_eval_cache: &mut WiEvalCache) -> B16 {
     let coord = B16::new(pt);
-    // println!("coord: {:?}", coord);
     while wi_eval_cache.cache.len() <= dim {
         wi_eval_cache.cache.push(HashMap::new());
     }
@@ -75,7 +74,6 @@ fn additive_ntt(vals: Vec<B16>, start: usize, wi_eval_cache: &mut WiEvalCache) -
     let sub_input2 = sub_input1.iter().zip(R.iter()).map(|(i, j)| *i + *j).collect();
     let mut o = additive_ntt(sub_input1, start, wi_eval_cache);
     o.extend(additive_ntt(sub_input2, start + halflen, wi_eval_cache));
-    // println!("for {:?} at {} used coeffs {:?}; returning {:?}", vals, start, coeff1, o);
     o
 }
 
@@ -100,7 +98,6 @@ fn inv_additive_ntt(vals: Vec<B16>, start: usize, wi_eval_cache: &mut WiEvalCach
     let coeff2 = coeff1 + B16::new(1);
     let mut o: Vec<_> = L.iter().zip(R.iter()).map(|(i, j)| *i * coeff2 + *j * coeff1).collect();
     o.append(&mut L.iter().zip(R.iter()).map(|(i, j)| *i + *j).collect());
-    // println!("for {:?} at {} used coeffs {:?}, {:?}; returning {:?}", vals, start, coeff1, coeff2, o);
     o
 }
 
