@@ -1,4 +1,4 @@
-use std::ops::{Add, Sub, Mul, Neg, Div};
+use std::ops::{Add, Div, Mul, Neg, Sub};
 
 /**
 A binary field element：a wrapper of u64
@@ -26,21 +26,20 @@ impl BinaryFieldElement16 {
     }
 
     /** Get the inverse of the element
-    
+
     inverse = element^(2^(bit_length(element) - 2))
 
     Returns:
         BinaryFieldElement: the inverse of the element
-        
+
     */
     fn inv(&self) -> Self {
-        let l = self.bit_length();
+        let l = self.value.next_power_of_two();
         self.pow(2u16.pow(l as u32) - 2)
-
     }
 
     /** Get the power of the element
-    
+
     power = element^(exp), and it is calculated recursively, using the following rules:
         1. if exp = 0, return 1
         2. if exp = 1, return element
@@ -67,15 +66,15 @@ impl BinaryFieldElement16 {
 
 /** Implement the Add trait for BinaryFieldElement
 
-    The addition of two binary field elements is the XOR of the two elements
+   The addition of two binary field elements is the XOR of the two elements
 
-    Args:
-        other (BinaryFieldElement): the other element to add
+   Args:
+       other (BinaryFieldElement): the other element to add
 
-    Returns:
-        BinaryFieldElement: the sum of the two elements
+   Returns:
+       BinaryFieldElement: the sum of the two elements
 
- */
+*/
 impl Add for BinaryFieldElement16 {
     type Output = Self;
 
@@ -92,15 +91,15 @@ impl Add for BinaryFieldElement16 {
 
 /** Implement the Sub trait for BinaryFieldElement
 
-    The subtraction of two binary field elements is the same as the addition
+   The subtraction of two binary field elements is the same as the addition
 
-    Args:
-        other (BinaryFieldElement): the other element to subtract
+   Args:
+       other (BinaryFieldElement): the other element to subtract
 
-    Returns:
-        BinaryFieldElement: the difference of the two elements
+   Returns:
+       BinaryFieldElement: the difference of the two elements
 
- */
+*/
 impl Sub for BinaryFieldElement16 {
     type Output = Self;
 
@@ -111,12 +110,12 @@ impl Sub for BinaryFieldElement16 {
 
 /** Implement the Neg trait for BinaryFieldElement
 
-    The negation of a binary field element is the element itself
+   The negation of a binary field element is the element itself
 
-    Returns:
-        BinaryFieldElement: the negation of the element
+   Returns:
+       BinaryFieldElement: the negation of the element
 
- */
+*/
 impl Neg for BinaryFieldElement16 {
     type Output = Self;
 
@@ -127,15 +126,15 @@ impl Neg for BinaryFieldElement16 {
 
 /** Implement the Mul trait for BinaryFieldElement
 
-    The multiplication of two binary field elements is calculated using the Karatsuba algorithm(implemented in binmul)
+   The multiplication of two binary field elements is calculated using the Karatsuba algorithm(implemented in binmul)
 
-    Args:
-        other (BinaryFieldElement): the other element to multiply
+   Args:
+       other (BinaryFieldElement): the other element to multiply
 
-    Returns:
-        BinaryFieldElement: the product of the two elements
+   Returns:
+       BinaryFieldElement: the product of the two elements
 
- */
+*/
 impl Mul for BinaryFieldElement16 {
     type Output = Self;
 
@@ -152,15 +151,15 @@ impl Mul for BinaryFieldElement16 {
 
 /** Implement the Div trait for BinaryFieldElement
 
-    The division of two binary field elements is the multiplication of the first element and the inverse of the second element
+   The division of two binary field elements is the multiplication of the first element and the inverse of the second element
 
-    Args:
-        other (BinaryFieldElement): the other element to divide
+   Args:
+       other (BinaryFieldElement): the other element to divide
 
-    Returns:
-        BinaryFieldElement: the quotient of the two elements
+   Returns:
+       BinaryFieldElement: the quotient of the two elements
 
- */
+*/
 impl Div for BinaryFieldElement16 {
     type Output = Self;
 
@@ -192,41 +191,27 @@ impl FromIterator<BinaryFieldElement16> for Vec<u8> {
     }
 }
 
-// // similar to the above function, but in different direction
-// impl TryFrom<&[u8]> for BinaryFieldElement16 {
-//     type Error = &'static str;
-
-//     fn try_from(slice: &[u8]) -> Result<Self, Self::Error> {
-//         if slice.len() == 2 {
-//             let value = u16::from_be_bytes([slice[0], slice[1]]);
-//             Ok(BinaryFieldElement16 { value })
-//         } else {
-//             Err("Slice length is not 2")
-//         }
-//     }
-// }
-
 /** Multiply v1 * v2 in the binary tower field
 
-    The multiplication of two binary field elements is calculated using the Karatsuba algorithm
+   The multiplication of two binary field elements is calculated using the Karatsuba algorithm
 
-    Args:
-        v1 (u16): the first element, important: v1 is not binary field element, it is u16
-        v2 (u16): the second element, important: v2 is not binary field element, it is u16
-        length (Option<usize>): the length of the elements
+   Args:
+       v1 (u16): the first element, important: v1 is not binary field element, it is u16
+       v2 (u16): the second element, important: v2 is not binary field element, it is u16
+       length (Option<usize>): the length of the elements
 
-    Returns:
-        u16: the product of the two elements
-    
-    Appendix:
-    See https://blog.lambdaclass.com/snarks-on-binary-fields-binius/ for introduction to how binary tower fields work
- */
+   Returns:
+       u16: the product of the two elements
+
+   Appendix:
+   See https://blog.lambdaclass.com/snarks-on-binary-fields-binius/ for introduction to how binary tower fields work
+*/
 pub fn bin_mul(v1: u16, v2: u16, length: Option<usize>) -> u16 {
     // if USE_CACHE && v1 < 256 && v2 < 256 && unsafe { RAWMULCACHE[v1 as usize][v2 as usize].is_some() } {
     //     return unsafe { RAWMULCACHE[v1 as usize][v2 as usize].unwrap() };
     // }
     if v1 < 2 || v2 < 2 {
-        return v1*v2;
+        return v1 * v2;
     }
 
     let length = match length {
@@ -249,10 +234,10 @@ pub fn bin_mul(v1: u16, v2: u16, length: Option<usize>) -> u16 {
     let halflen = length / 2;
     let quarterlen = length / 4;
     let halfmask = (1 << halflen) - 1;
-    
+
     let (l1, r1) = (v1 & halfmask, v1 >> halflen);
     let (l2, r2) = (v2 & halfmask, v2 >> halflen);
-    
+
     // # Optimized special case (used to compute R1R2_high), sec III of
     // https://ieeexplore.ieee.org/document/612935
     if (l1, r1) == (0, 1) {
@@ -303,19 +288,29 @@ fn big_mul_impl(x1: &Vec<u16>, x2: &Vec<u16>) -> Vec<u16> {
     if n == 1 {
         return vec![bin_mul(x1[0], x2[0], None)];
     }
-    let l1 = x1[..n/2].to_vec();
-    let l2 = x2[..n/2].to_vec();
-    let r1 = x1[n/2..].to_vec();
-    let r2 = x2[n/2..].to_vec();
+    let l1 = x1[..n / 2].to_vec();
+    let l2 = x2[..n / 2].to_vec();
+    let r1 = x1[n / 2..].to_vec();
+    let r2 = x2[n / 2..].to_vec();
     let l1l2 = big_mul_impl(&l1, &l2);
     let r1r2 = big_mul_impl(&r1, &r2);
-    let r1r2_high = mul_by_Xi(r1r2.clone(), n/2);
+    let r1r2_high = mul_by_Xi(r1r2.clone(), n / 2);
     let z3 = big_mul_impl(
         &l1.iter().zip(r1.iter()).map(|(a, b)| a ^ b).collect(),
-        &l2.iter().zip(r2.iter()).map(|(a, b)| a ^ b).collect()
+        &l2.iter().zip(r2.iter()).map(|(a, b)| a ^ b).collect(),
     );
-    let part1 = l1l2.iter().zip(r1r2.iter()).map(|(a, b)| a ^ b).collect::<Vec<u16>>();
-    let part2 = z3.iter().zip(l1l2.iter()).zip(r1r2.iter()).zip(r1r2_high.iter()).map(|(((a, b), c), d)| a ^ b ^ c ^ d).collect::<Vec<u16>>();
+    let part1 = l1l2
+        .iter()
+        .zip(r1r2.iter())
+        .map(|(a, b)| a ^ b)
+        .collect::<Vec<u16>>();
+    let part2 = z3
+        .iter()
+        .zip(l1l2.iter())
+        .zip(r1r2.iter())
+        .zip(r1r2_high.iter())
+        .map(|(((a, b), c), d)| a ^ b ^ c ^ d)
+        .collect::<Vec<u16>>();
     let mut result = Vec::new();
     result.extend_from_slice(&part1);
     result.extend_from_slice(&part2);
@@ -325,7 +320,6 @@ fn big_mul_impl(x1: &Vec<u16>, x2: &Vec<u16>) -> Vec<u16> {
 pub fn big_mul<T: BigMul>(x1: T, x2: T) -> Vec<u16> {
     x1.big_mul(x2)
 }
-
 
 /** Multiply a big binary number by Xi
 
@@ -342,15 +336,18 @@ pub fn mul_by_Xi(x: Vec<u16>, n: usize) -> Vec<u16> {
     if x.len() == 1 {
         return vec![bin_mul(x[0], 256, None)];
     }
-    let l = x[..n/2].to_vec();
-    let r = x[n/2..].to_vec();
-    let out_r = mul_by_Xi(r.clone(), n/2).iter().zip(l.iter()).map(|(a, b)| a ^ b).collect::<Vec<u16>>();
+    let l = x[..n / 2].to_vec();
+    let r = x[n / 2..].to_vec();
+    let out_r = mul_by_Xi(r.clone(), n / 2)
+        .iter()
+        .zip(l.iter())
+        .map(|(a, b)| a ^ b)
+        .collect::<Vec<u16>>();
     let mut result = Vec::new();
     result.extend_from_slice(&r);
     result.extend_from_slice(&out_r);
     result
 }
-
 
 /** Convert a 128-bit integer into a length-8 vector of uint16's
 
@@ -407,10 +404,6 @@ pub fn uint16s_to_bits<T: ToU16>(data: &Vec<T>) -> Vec<u8> {
         }
     }
     result
-    // data.iter().map(|value| {
-    //     let value_u16 = value.to_u16();
-    //     (0..16).map(|i| ((value_u16 >> i) & 1) as u8).collect()
-    // }).collect()
 }
 
 pub fn uint16_to_bit(value: &BinaryFieldElement16) -> Vec<u8> {
@@ -462,19 +455,27 @@ mod tests {
     }
 
     #[test]
+    fn test_binary_field_element_inv() {
+        let a = BinaryFieldElement16::new(4);
+        assert_eq!(a.inv(), BinaryFieldElement16::new(6));
+    }
+
+    #[test]
     fn test_binary_field_element_pow() {
         let a = BinaryFieldElement16::new(2);
         assert_eq!(a.pow(3), BinaryFieldElement16::new(1));
     }
 
-
     #[test]
-    fn test_big_mul(){
+    fn test_big_mul() {
         // big_mul(int_to_bigbin(3**29), int_to_bigbin(5**29))= [46732 49627 26993 63626 14101 27237 21150     0]
         let a = int_to_bigbin(3u128.pow(29));
         let b = int_to_bigbin(5u128.pow(29));
         let result = big_mul(a, b);
-        assert_eq!(result, vec![46732, 49627, 26993, 63626, 14101, 27237, 21150, 0]);
+        assert_eq!(
+            result,
+            vec![46732, 49627, 26993, 63626, 14101, 27237, 21150, 0]
+        );
     }
 
     #[test]
@@ -483,10 +484,17 @@ mod tests {
         let result = uint16s_to_bits(&data);
         assert_eq!(result, vec![1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
         // test on [[1,3]],check result != [1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0]
-        let data = vec![BinaryFieldElement16::new(1u16), BinaryFieldElement16::new(3u16)];
+        let data = vec![
+            BinaryFieldElement16::new(1u16),
+            BinaryFieldElement16::new(3u16),
+        ];
         let result = uint16s_to_bits(&data);
-        assert_eq!(result, vec![1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-        
+        assert_eq!(
+            result,
+            vec![
+                1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0
+            ]
+        );
     }
-
 }

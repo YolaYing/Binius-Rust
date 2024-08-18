@@ -1,6 +1,6 @@
-use crate::binary_field16::BinaryFieldElement16 as B16;
-use super::binary_field16::{int_to_bigbin, big_mul, uint16s_to_bits};
+use super::binary_field16::{big_mul, int_to_bigbin, uint16s_to_bits};
 use super::binary_ntt::extend;
+use crate::binary_field16::BinaryFieldElement16 as B16;
 use std::convert::TryFrom;
 
 /** transfrom the evaluations into a specific matrix
@@ -22,7 +22,7 @@ pub fn choose_row_length_and_count(log_evaluation_count: usize) -> (usize, usize
 }
 
 /** row packing
- 
+
 perform packing for each row, packing every 16 bits into a unit16, so each row is a list of uint16s
     and the 16 is controlled by packing_factor, and to make later calculation easier, we use BinaryFieldElement16s to represent the unit16s
 
@@ -35,7 +35,12 @@ Args:
 Returns:
     a list of rows, each row is a list of BinaryFieldElement16s
  */
-pub fn pack_rows(evaluations: &[u8], row_count: usize, row_length: usize, packing_factor: usize) -> Vec<Vec<B16>> {
+pub fn pack_rows(
+    evaluations: &[u8],
+    row_count: usize,
+    row_length: usize,
+    packing_factor: usize,
+) -> Vec<Vec<B16>> {
     let mut rows = Vec::with_capacity(row_count);
     let mut packed_row_length = row_length / packing_factor;
 
@@ -46,23 +51,31 @@ pub fn pack_rows(evaluations: &[u8], row_count: usize, row_length: usize, packin
         for j in 0..packed_row_length {
             // let flipped: Vec<u8>= evaluations[i * row_length /8+ j * packing_factor/8..i * row_length/8 +(j + 1) * packing_factor/8].iter().map(|&byte|byte.reverse_bits()).collect();
             // packed_row.push(B16::new(u16::from_le_bytes(flipped.try_into().unwrap())));
-            packed_row.push(B16::new(u16::from_le_bytes(evaluations[i * row_length /8+ j * packing_factor/8..i * row_length/8 +(j + 1) * packing_factor/8].try_into().unwrap())));
+            packed_row.push(B16::new(u16::from_le_bytes(
+                evaluations[i * row_length / 8 + j * packing_factor / 8
+                    ..i * row_length / 8 + (j + 1) * packing_factor / 8]
+                    .try_into()
+                    .unwrap(),
+            )));
         }
         rows.push(packed_row);
     }
     rows
 }
+
 // similar logic as above, but return type is Vec<B16> instead of Vec<Vec<B16>>
+// and the inputs are all Vec<u8>
 pub fn pack_row(evaluations: &[u8], row_length: usize, packing_factor: usize) -> Vec<B16> {
     let mut packed_row = Vec::with_capacity(row_length / packing_factor);
     for j in 0..row_length / packing_factor {
-        let flipped: Vec<u8>= evaluations[j * packing_factor / 8..(j + 1) * packing_factor / 8].iter().map(|&byte|byte.reverse_bits()).collect();
+        let flipped: Vec<u8> = evaluations[j * packing_factor / 8..(j + 1) * packing_factor / 8]
+            .iter()
+            .map(|&byte| byte.reverse_bits())
+            .collect();
         packed_row.push(B16::new(u16::from_le_bytes(flipped.try_into().unwrap())));
     }
     packed_row
 }
-
-
 
 /** Fast-Fourier extend the rows
 
@@ -74,12 +87,14 @@ Args:
 
 Returns:
     the extended rows, each row is a list of uint16s
- 
+
  */
 pub fn extend_rows(rows: &Vec<Vec<B16>>, expansion_factor: usize) -> Vec<Vec<B16>> {
     let new_dimension = rows[0].len() * (expansion_factor - 1);
     // use extend function from binary_ntt.rs to extend each row and get the extended rows
-    rows.iter().map(|row| extend(row.to_vec(), expansion_factor)).collect()
+    rows.iter()
+        .map(|row| extend(row.to_vec(), expansion_factor))
+        .collect()
 }
 
 /** calculate the tensor product of evaluations
@@ -99,8 +114,15 @@ pub fn evaluation_tensor_product(eval_point: &Vec<u128>) -> Vec<Vec<u16>> {
 
     for coord in eval_point {
         // for all the element in o, conduct big_mul for the element and &int_to_bigbin(coord)
-        let o_times_coord: Vec<Vec<u16>> = o.iter().map(|x| big_mul(x, &int_to_bigbin(*coord))).collect();
-        o = o.iter().zip(o_times_coord.iter()).map(|(x, y)| x.iter().zip(y.iter()).map(|(a, b)| a ^ b).collect()).collect();
+        let o_times_coord: Vec<Vec<u16>> = o
+            .iter()
+            .map(|x| big_mul(x, &int_to_bigbin(*coord)))
+            .collect();
+        o = o
+            .iter()
+            .zip(o_times_coord.iter())
+            .map(|(x, y)| x.iter().zip(y.iter()).map(|(a, b)| a ^ b).collect())
+            .collect();
         o.extend_from_slice(&o_times_coord);
     }
     o
@@ -109,7 +131,7 @@ pub fn evaluation_tensor_product(eval_point: &Vec<u128>) -> Vec<Vec<u16>> {
 /** XOR along axis
 
 XOR along rows or columns, if axis = 0, then XOR along rows, if axis = 1, then XOR along columns
-    for example: 
+    for example:
         we have a matrix like [[1, 2, 3], [4, 5, 6]]
         if axis = 0, then the result will be [1^4, 2^5, 3^6] = [5, 7, 5]
         if axis = 1, then the result will be [1^2^3, 4^5^6] = [0, 7]
@@ -123,7 +145,7 @@ Returns:
 */
 pub fn xor_along_axis(values: &[Vec<u16>], axis: usize) -> Vec<u16> {
     let mut result: Vec<u16>;
-    
+
     if axis == 0 {
         // XOR along rows (axis=0)
         result = values[0].clone();
@@ -211,7 +233,7 @@ fn xor_along_axis_4d(values: &Vec<Vec<Vec<Vec<u16>>>>, axis: usize) -> Vec<Vec<V
                 }
                 row.push(col);
             }
-        result.push(row);
+            result.push(row);
         }
     } else {
         panic!("Unsupported axis");
@@ -229,15 +251,14 @@ Returns:
     the output, a list of list of u8, representing the transposed bits
  */
 pub fn transpose_bits(input: Vec<Vec<u8>>) -> Vec<Vec<u8>> {
-    let mut output = vec![vec![0u8; (input.len()+7)/8]; input[0].len()];
+    let mut output = vec![vec![0u8; (input.len() + 7) / 8]; input[0].len()];
     for i in 0..input.len() {
         for j in 0..input[0].len() {
-            // 
-            output[j][i/8] |= (input[i][j] as u8) << ((input.len()-1 - i) % 8);
+            //
+            output[j][i / 8] |= (input[i][j] as u8) << ((input.len() - 1 - i) % 8);
         }
     }
     output
-    
 }
 /** transpose the matrix
 
@@ -269,27 +290,37 @@ Args:
 Returns:
     the t', a 2D array, shape is (m, 2^k)
 */
-pub fn computed_tprimes(rows_as_bits_transpose: &Vec<Vec<u8>>, row_combination: &Vec<Vec<u16>>) -> Vec<Vec<u16>> {
+pub fn computed_tprimes(
+    rows_as_bits_transpose: &Vec<Vec<u8>>,
+    row_combination: &Vec<Vec<u16>>,
+) -> Vec<Vec<u16>> {
     // create a 2D array, shape is (m, 2^k), and all the elements are 0
     let mut t_prime = vec![vec![0u16; row_combination[0].len()]; rows_as_bits_transpose.len()];
-    
+
     for j in 0..row_combination[0].len() {
         // each row of row_combination as comb, and use comb to multiply the bits of each row in rows_as_bits_transpose
-        let multi_res: Vec<Vec<u16>> = rows_as_bits_transpose.iter().map(|row| {
-            row_combination.iter().enumerate().map(|(k, comb)| {
-                let bit = (row[0] >> (row_combination.len() - 1 - k)) & 1;
-                bit as u16 * comb[j]
-            }).collect()
-        }).collect();
-        
+        let multi_res: Vec<Vec<u16>> = rows_as_bits_transpose
+            .iter()
+            .map(|row| {
+                row_combination
+                    .iter()
+                    .enumerate()
+                    .map(|(k, comb)| {
+                        let bit = (row[0] >> (row_combination.len() - 1 - k)) & 1;
+                        bit as u16 * comb[j]
+                    })
+                    .collect()
+            })
+            .collect();
+
         // XOR along axis 1
         let xor_res = xor_along_axis(&multi_res, 1);
-        
+
         for (i, res) in xor_res.iter().enumerate() {
             t_prime[i][j] ^= res;
         }
     }
-    
+
     t_prime
 }
 
@@ -350,12 +381,9 @@ pub fn transpose_3d(matrix: &Vec<Vec<Vec<u8>>>, order: (usize, usize, usize)) ->
     transposed
 }
 
-
-
-
 /** Mutisubset sum
 
-Given a list of N objects, and a list of length-N bitvectors representing subsets of those objects, 
+Given a list of N objects, and a list of length-N bitvectors representing subsets of those objects,
     compute the xor-sum of each subset. Uses the main subroutine of Pippenger-style algorithms, see: https://ethresear.ch/t/7238
 
 Args:
@@ -363,39 +391,39 @@ Args:
     bits: the bits(transposed_column_bits, Vec<Vec<Vec<u8>>)
 */
 pub fn multisubset(values: &Vec<Vec<u16>>, bits: &Vec<Vec<Vec<u8>>>) -> Vec<Vec<Vec<u16>>> {
-
     let GROUPING = 4;
     let mut subsets = vec![vec![vec![0u16; values[0].len()]; 16]; values.len() / GROUPING];
-    
+
     for i in 0..GROUPING {
         for j in (0..values.len()).step_by(GROUPING) {
-            subsets[j/GROUPING][1<<i] = values[j + i].clone();
+            subsets[j / GROUPING][1 << i] = values[j + i].clone();
         }
     }
 
     // generate the subsets
     let mut top_p_of_2 = 2;
-    for i in 3..1<<GROUPING {
-        if (i & (i-1)) == 0 {
+    for i in 3..1 << GROUPING {
+        if (i & (i - 1)) == 0 {
             top_p_of_2 = i;
         } else {
             for j in (0..values.len()).step_by(GROUPING) {
                 for k in 0..values[0].len() {
-                    subsets[j/GROUPING][i][k] = subsets[j/GROUPING][top_p_of_2][k] ^ subsets[j/GROUPING][i - top_p_of_2][k];
+                    subsets[j / GROUPING][i][k] = subsets[j / GROUPING][top_p_of_2][k]
+                        ^ subsets[j / GROUPING][i - top_p_of_2][k];
                 }
             }
         }
     }
 
     // use bits to generate the index_columns, and then use the index_columns to select the elements from subsets
-    let index_columns: Vec<Vec<Vec<u8>>>= bits.iter()
+    let index_columns: Vec<Vec<Vec<u8>>> = bits
+        .iter()
         .map(|matrix| {
-            matrix.iter()
+            matrix
+                .iter()
                 .map(|row| {
                     row.chunks(4)
-                        .map(|chunk| {
-                            chunk.iter().rev().fold(0, |acc, &bit| (acc << 1) | bit)
-                        })
+                        .map(|chunk| chunk.iter().rev().fold(0, |acc, &bit| (acc << 1) | bit))
                         .collect()
                 })
                 .collect()
@@ -418,13 +446,11 @@ pub fn multisubset(values: &Vec<Vec<u16>>, bits: &Vec<Vec<Vec<u8>>>) -> Vec<Vec<
                 .collect()
         })
         .collect();
-    
+
     // XOR along axis 3
     let o = xor_along_axis_4d(&selected_elements, 2);
     o
-    
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -442,28 +468,25 @@ mod tests {
     }
 
     #[test]
-    fn test_pack_rows() {
-        let evaluations = vec![0u8; 8];
-        let row_count = 2;
-        let row_length = 4;
-        let rows = pack_rows(&evaluations, row_count, row_length, 16);
-        assert_eq!(rows.len(), 2);
-        assert_eq!(rows[0].len(), 2);
-    }
-
-    
-    #[test]
     fn test_extend() {
-        let rows = vec![vec![B16::new(1), B16::new(3)], vec![B16::new(9), B16::new(15)]];
+        let rows = vec![
+            vec![B16::new(1), B16::new(3)],
+            vec![B16::new(9), B16::new(15)],
+        ];
         let extended_rows = extend_rows(&rows, 2);
-        assert_eq!(extended_rows[0], vec![B16::new(1), B16::new(3), B16::new(2), B16::new(0)]);
-        assert_eq!(extended_rows[1], vec![B16::new(9), B16::new(15), B16::new(2), B16::new(4)]);
-
+        assert_eq!(
+            extended_rows[0],
+            vec![B16::new(1), B16::new(3), B16::new(2), B16::new(0)]
+        );
+        assert_eq!(
+            extended_rows[1],
+            vec![B16::new(9), B16::new(15), B16::new(2), B16::new(4)]
+        );
     }
 
     #[test]
     fn test_evaluation_tensor_product() {
-        let eval_point = vec![2,5];
+        let eval_point = vec![2, 5];
         let result = evaluation_tensor_product(&eval_point);
         // i need to compare the equality of two vectors of Vec(Vec(u16)), the following code is not working
         // assert_eq!(result, vec![int_to_bigbin(12), int_to_bigbin(8), int_to_bigbin(15), int_to_bigbin(10)]);
@@ -471,7 +494,6 @@ mod tests {
         assert_eq!(result[1], int_to_bigbin(8));
         assert_eq!(result[2], int_to_bigbin(15));
         assert_eq!(result[3], int_to_bigbin(10));
-        
     }
 
     #[test]
@@ -485,17 +507,22 @@ mod tests {
 
     #[test]
     fn test_transpose_bits() {
-        let data = vec![vec![B16::new(1), B16::new(3)], vec![B16::new(9), B16::new(15)]];
+        let data = vec![
+            vec![B16::new(1), B16::new(3)],
+            vec![B16::new(9), B16::new(15)],
+        ];
         // use uint16s_to_bits to convert the data into bits row by row
         let input = data.iter().map(|row| uint16s_to_bits(row)).collect();
         let output = transpose_bits(input);
         assert_eq!(output[0], [3]);
-        
     }
 
     #[test]
     fn test_transpose() {
-        let data = vec![vec![B16::new(1), B16::new(3)], vec![B16::new(9), B16::new(15)]];
+        let data = vec![
+            vec![B16::new(1), B16::new(3)],
+            vec![B16::new(9), B16::new(15)],
+        ];
         let output = transpose(data);
         assert_eq!(output[0], [B16::new(1), B16::new(9)]);
         assert_eq!(output[1], [B16::new(3), B16::new(15)]);
@@ -503,10 +530,16 @@ mod tests {
 
     #[test]
     fn test_computed_tprimes() {
-        let eval_point = vec![2,5];
-        let rows = vec![vec![B16::new(1), B16::new(3)], vec![B16::new(9), B16::new(15)], vec![B16::new(2), B16::new(4)], vec![B16::new(0), B16::new(0)]];
-        
-        let rows_as_bits_transpose = transpose_bits(rows.iter().map(|row| uint16s_to_bits(row)).collect());
+        let eval_point = vec![2, 5];
+        let rows = vec![
+            vec![B16::new(1), B16::new(3)],
+            vec![B16::new(9), B16::new(15)],
+            vec![B16::new(2), B16::new(4)],
+            vec![B16::new(0), B16::new(0)],
+        ];
+
+        let rows_as_bits_transpose =
+            transpose_bits(rows.iter().map(|row| uint16s_to_bits(row)).collect());
         let row_combination = evaluation_tensor_product(&eval_point);
         let result = computed_tprimes(&rows_as_bits_transpose, &row_combination);
 
@@ -522,4 +555,12 @@ mod tests {
         assert_eq!(result, [B16::new(5131)]);
     }
 
+    #[test]
+    fn test_pack_rows() {
+        let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+        let result = pack_rows(&data, 8, 16, 16);
+        assert_eq!(result[0], [B16::new(513)]);
+        assert_eq!(result[1], [B16::new(1027)]);
+        assert_eq!(result[2], [B16::new(1541)]);
+    }
 }

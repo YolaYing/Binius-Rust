@@ -10,13 +10,14 @@ Args:
 Returns:
     Vec<u16>: the challenges, indexes of the columns
 */
-pub fn get_challenges(root: &[u8], extended_row_length: usize, num_challenges:usize) -> Vec<u16> {
+pub fn get_challenges(root: &[u8], extended_row_length: usize, num_challenges: usize) -> Vec<u16> {
     let mut o = vec![];
     for i in 0..num_challenges {
         let mut bytes = root.to_vec();
         bytes.push(i as u8);
         let hash = hash(&bytes);
-        let challenge = u16::from_le_bytes(hash[0..2].try_into().unwrap()) % extended_row_length as u16;
+        let challenge =
+            u16::from_le_bytes(hash[0..2].try_into().unwrap()) % extended_row_length as u16;
         o.push(challenge);
     }
     o

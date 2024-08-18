@@ -9,7 +9,6 @@ impl WiEvalCache {
     pub fn new() -> Self {
         WiEvalCache { cache: vec![] }
     }
-    
 }
 /** calculate Wi(pt)
 
@@ -69,9 +68,21 @@ fn additive_ntt(vals: Vec<B16>, start: usize, wi_eval_cache: &mut WiEvalCache) -
     }
     let halflen = vals.len() / 2;
     let (L, R) = vals.split_at(halflen);
-    let coeff1 = get_Wi_eval((halflen as f64).log2() as usize, start as u16, wi_eval_cache);
-    let sub_input1: Vec<_>  = L.iter().zip(R.iter()).map(|(i, j)| *i + *j * coeff1).collect();
-    let sub_input2 = sub_input1.iter().zip(R.iter()).map(|(i, j)| *i + *j).collect();
+    let coeff1 = get_Wi_eval(
+        (halflen as f64).log2() as usize,
+        start as u16,
+        wi_eval_cache,
+    );
+    let sub_input1: Vec<_> = L
+        .iter()
+        .zip(R.iter())
+        .map(|(i, j)| *i + *j * coeff1)
+        .collect();
+    let sub_input2 = sub_input1
+        .iter()
+        .zip(R.iter())
+        .map(|(i, j)| *i + *j)
+        .collect();
     let mut o = additive_ntt(sub_input1, start, wi_eval_cache);
     o.extend(additive_ntt(sub_input2, start + halflen, wi_eval_cache));
     o
@@ -94,9 +105,17 @@ fn inv_additive_ntt(vals: Vec<B16>, start: usize, wi_eval_cache: &mut WiEvalCach
     let halflen = vals.len() / 2;
     let L = inv_additive_ntt(vals[..halflen].to_vec(), start, wi_eval_cache);
     let R = inv_additive_ntt(vals[halflen..].to_vec(), start + halflen, wi_eval_cache);
-    let coeff1 = get_Wi_eval((halflen as f64).log2() as usize, start as u16, wi_eval_cache);
+    let coeff1 = get_Wi_eval(
+        (halflen as f64).log2() as usize,
+        start as u16,
+        wi_eval_cache,
+    );
     let coeff2 = coeff1 + B16::new(1);
-    let mut o: Vec<_> = L.iter().zip(R.iter()).map(|(i, j)| *i * coeff2 + *j * coeff1).collect();
+    let mut o: Vec<_> = L
+        .iter()
+        .zip(R.iter())
+        .map(|(i, j)| *i * coeff2 + *j * coeff1)
+        .collect();
     o.append(&mut L.iter().zip(R.iter()).map(|(i, j)| *i + *j).collect());
     o
 }
@@ -105,7 +124,7 @@ fn inv_additive_ntt(vals: Vec<B16>, start: usize, wi_eval_cache: &mut WiEvalCach
 
 the logic of the function is that:
     first use inv_additive_ntt to convert the row into coefficients,
-    then expend the row by expansion_factor times(e,g, 2 times), 
+    then expend the row by expansion_factor times(e,g, 2 times),
     then padding the row with 0s after the original row(e.g. expansion_factor - 1 times)
     then use the additive_ntt to convert the row into evaluations
 
@@ -122,8 +141,6 @@ pub fn extend(data: Vec<B16>, expansion_factor: usize) -> Vec<B16> {
     o.extend(vec![B16::new(0); data.len() * (expansion_factor - 1)]);
     additive_ntt(o, 0, &mut WiEvalCache::new())
 }
-
-
 
 #[cfg(test)]
 mod tests {
@@ -144,7 +161,10 @@ mod tests {
         let vals = vec![B16::new(1), B16::new(2), B16::new(3), B16::new(4)];
         let start = 0;
         let result = additive_ntt(vals, start, &mut wi_eval_cache);
-        assert_eq!(result, vec![B16::new(1), B16::new(3), B16::new(9), B16::new(15)]);
+        assert_eq!(
+            result,
+            vec![B16::new(1), B16::new(3), B16::new(9), B16::new(15)]
+        );
     }
 
     #[test]
@@ -153,15 +173,29 @@ mod tests {
         let vals = vec![B16::new(1), B16::new(3), B16::new(9), B16::new(15)];
         let start = 0;
         let result = inv_additive_ntt(vals, start, &mut wi_eval_cache);
-        assert_eq!(result, vec![B16::new(1), B16::new(2), B16::new(3), B16::new(4)]);
+        assert_eq!(
+            result,
+            vec![B16::new(1), B16::new(2), B16::new(3), B16::new(4)]
+        );
     }
 
     #[test]
     fn test_extend() {
-        let data = vec![B16::new(1), B16::new(3), B16::new(9),  B16::new(15)];
+        let data = vec![B16::new(1), B16::new(3), B16::new(9), B16::new(15)];
         let expansion_factor = 2;
         let result = extend(data, expansion_factor);
-        assert_eq!(result, vec![B16::new(1), B16::new(3), B16::new(9), B16::new(15), B16::new(14), B16::new(15),  B16::new(14),  B16::new(11)]);
+        assert_eq!(
+            result,
+            vec![
+                B16::new(1),
+                B16::new(3),
+                B16::new(9),
+                B16::new(15),
+                B16::new(14),
+                B16::new(15),
+                B16::new(14),
+                B16::new(11)
+            ]
+        );
     }
-
 }
