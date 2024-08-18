@@ -240,6 +240,7 @@ fn xor_along_axis_4d(values: &Vec<Vec<Vec<Vec<u16>>>>, axis: usize) -> Vec<Vec<V
     }
     result
 }
+
 /** transpose the bits
 
 ragarding the input as bits, transpose the bits
@@ -324,29 +325,6 @@ pub fn computed_tprimes(
     t_prime
 }
 
-// /** transpose the 3D matrix
-
-// similar to np.transpose(column_bits, (0,2,1)) in python,
-//     swaps the rows and columns of each 2D array within the 3D array, effectively turning rows into columns and vice versa.
-//  */
-// pub fn transpose_3d(matrix: &Vec<Vec<Vec<u8>>>) -> Vec<Vec<Vec<u8>>> {
-//     let dim0 = matrix.len(); // Number of matrices
-//     let dim1 = matrix[0].len(); // Number of rows in each matrix
-//     let dim2 = matrix[0][0].len(); // Number of columns in each matrix
-
-//     // Initialize the transposed 3D matrix with zeros
-//     let mut transposed = vec![vec![vec![0; dim1]; dim2]; dim0];
-
-//     for i in 0..dim0 {
-//         for j in 0..dim1 {
-//             for k in 0..dim2 {
-//                 transposed[i][k][j] = matrix[i][j][k];
-//             }
-//         }
-//     }
-
-//     transposed
-// }
 /** transpose the 3D matrix
 
 similar to np.transpose(column_bits, (0,2,1)) in python,
