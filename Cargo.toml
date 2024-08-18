@@ -1,0 +1,14 @@
+[package]
+name = "binius_rust_version"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+p3-util = { version = "0.1.0", git = "https://github.com/Plonky3/Plonky3", rev = "3f5fb24" }
+ndarray = "0.16.0"
+sha2 = "0.10.8"
+
+[dev-dependencies]
+criterion = "0.5.0"
