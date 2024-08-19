@@ -314,20 +314,6 @@ pub fn computed_tprimes(
             })
             .collect();
 
-        // let multi_res: Vec<Vec<u16>> = rows_as_bits_transpose
-        //     .iter()
-        //     .map(|row| {
-        //         row_combination
-        //             .iter()
-        //             .enumerate()
-        //             .map(|(k, comb)| {
-        //                 let bit = (row[0] >> (row_combination.len() - 1 - k)) & 1;
-        //                 bit as u16 * comb[j]
-        //             })
-        //             .collect()
-        //     })
-        //     .collect();
-
         // XOR along axis 1
         let xor_res = xor_along_axis(&multi_res, 1);
 
