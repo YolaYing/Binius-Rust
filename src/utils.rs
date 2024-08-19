@@ -271,7 +271,7 @@ Args:
 Returns:
     the output, a transposed list of list of B16
 */
-pub fn transpose(input: Vec<Vec<B16>>) -> Vec<Vec<B16>> {
+pub fn transpose(input: &Vec<Vec<B16>>) -> Vec<Vec<B16>> {
     let mut output = vec![vec![B16::new(0); input.len()]; input[0].len()];
     for i in 0..input.len() {
         for j in 0..input[0].len() {
@@ -299,20 +299,34 @@ pub fn computed_tprimes(
     let mut t_prime = vec![vec![0u16; row_combination[0].len()]; rows_as_bits_transpose.len()];
 
     for j in 0..row_combination[0].len() {
-        // each row of row_combination as comb, and use comb to multiply the bits of each row in rows_as_bits_transpose
+        // each column of row_combination as comb, and use comb to multiply the bits of each row in rows_as_bits_transpose
         let multi_res: Vec<Vec<u16>> = rows_as_bits_transpose
             .iter()
             .map(|row| {
-                row_combination
-                    .iter()
-                    .enumerate()
-                    .map(|(k, comb)| {
-                        let bit = (row[0] >> (row_combination.len() - 1 - k)) & 1;
-                        bit as u16 * comb[j]
+                (0..row_combination.len())
+                    .map(|i| {
+                        // get the i-th bit of the row
+                        let bit = (row[i / 8] >> (7 - i % 8)) & 1;
+                        // multiply the bit with the i-th row and j-th column of row_combination
+                        bit as u16 * row_combination[i][j]
                     })
                     .collect()
             })
             .collect();
+
+        // let multi_res: Vec<Vec<u16>> = rows_as_bits_transpose
+        //     .iter()
+        //     .map(|row| {
+        //         row_combination
+        //             .iter()
+        //             .enumerate()
+        //             .map(|(k, comb)| {
+        //                 let bit = (row[0] >> (row_combination.len() - 1 - k)) & 1;
+        //                 bit as u16 * comb[j]
+        //             })
+        //             .collect()
+        //     })
+        //     .collect();
 
         // XOR along axis 1
         let xor_res = xor_along_axis(&multi_res, 1);
@@ -501,7 +515,7 @@ mod tests {
             vec![B16::new(1), B16::new(3)],
             vec![B16::new(9), B16::new(15)],
         ];
-        let output = transpose(data);
+        let output = transpose(&data);
         assert_eq!(output[0], [B16::new(1), B16::new(9)]);
         assert_eq!(output[1], [B16::new(3), B16::new(15)]);
     }

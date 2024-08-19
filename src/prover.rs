@@ -1,5 +1,8 @@
-const EXPANSION_FACTOR: usize = 4;
-const NUM_CHALLENGES: usize = 2;
+// const EXPANSION_FACTOR: usize = 4;
+// const NUM_CHALLENGES: usize = 2;
+// const PACKING_FACTOR: usize = 16;
+const EXPANSION_FACTOR: usize = 8;
+const NUM_CHALLENGES: usize = 32;
 const PACKING_FACTOR: usize = 16;
 
 use crate::merkle_tree::get_branch;
@@ -42,7 +45,7 @@ pub fn prover(evaluations: &[u8], evalutaion_point: Vec<u128>) -> Proof {
     let t_prime = computed_tprimes(&rows_as_bits_transpose, &row_combination);
 
     // Pack columns into a Merkle tree
-    let columns = transpose(extended_rows);
+    let columns = transpose(&extended_rows);
     // packed_columns = [col.tobytes('C') for col in columns]
     let packed_columns = columns
         .iter()
@@ -69,10 +72,11 @@ pub fn prover(evaluations: &[u8], evalutaion_point: Vec<u128>) -> Proof {
         evaluation_point: evalutaion_point,
         eval: computed_eval,
         t_prime,
-        columns: challenges
-            .iter()
-            .map(|&c| columns[c as usize].clone())
-            .collect(),
+        columns,
+        // columns: challenges
+        //     .iter()
+        //     .map(|&c| columns[c as usize].clone())
+        //     .collect(),
         branches: challenges
             .iter()
             .map(|c| get_branch(&merkle_tree, (*c).into()))
@@ -114,6 +118,32 @@ mod tests {
             vec![
                 117, 231, 100, 194, 34, 254, 150, 92, 231, 217, 46, 180, 190, 247, 71, 93, 114, 98,
                 57, 172, 82, 119, 48, 229, 64, 230, 118, 239, 184, 26, 154, 48
+            ]
+        );
+    }
+
+    #[test]
+    fn test_big_data_prover() {
+        let evaluations = vec![1; 1 << 20];
+        let evaluation_point = vec![1; 23];
+        let result = prover(&evaluations, evaluation_point);
+
+        assert_eq!(
+            result.root,
+            vec![
+                14, 137, 1, 182, 32, 73, 136, 127, 237, 218, 39, 11, 5, 243, 134, 95, 106, 158,
+                189, 161, 93, 114, 169, 113, 24, 23, 215, 128, 16, 106, 56, 90
+            ]
+        );
+        assert_eq!(result.evaluation_point.len(), 23);
+        assert_eq!(result.eval, vec![0, 0, 0, 0, 0, 0, 0, 0]);
+        assert_eq!(result.t_prime[0], vec![1, 0, 0, 0, 0, 0, 0, 0]);
+        assert_eq!(result.columns.len(), 2048);
+        assert_eq!(
+            result.branches[7][4],
+            vec![
+                87, 16, 103, 115, 59, 231, 163, 189, 151, 96, 41, 109, 226, 231, 251, 42, 204, 154,
+                35, 52, 8, 58, 252, 189, 51, 41, 4, 29, 30, 31, 212, 86
             ]
         );
     }

@@ -1,5 +1,8 @@
-const EXPANSION_FACTOR: usize = 4;
-const NUM_CHALLENGES: usize = 2;
+// const EXPANSION_FACTOR: usize = 4;
+// const NUM_CHALLENGES: usize = 2;
+// const PACKING_FACTOR: usize = 16;
+const EXPANSION_FACTOR: usize = 8;
+const NUM_CHALLENGES: usize = 32;
 const PACKING_FACTOR: usize = 16;
 
 use sha2::digest::typenum::uint;
@@ -13,7 +16,7 @@ use super::utils::{
     multisubset, pack_row, transpose_3d, transpose_bits, xor_along_axis,
 };
 
-fn verify_optimized_binius_proof(proof: Proof) -> bool {
+pub fn verifier(proof: Proof) -> bool {
     let columns = proof.columns;
     let evaluation_point = proof.evaluation_point;
     let value = proof.eval;
@@ -58,8 +61,13 @@ fn verify_optimized_binius_proof(proof: Proof) -> bool {
 
     // Here, we take advantage of the linearity of the code. A linear combination of the Reed-Solomon extension gives the same result as an extension of the linear combination.
     let row_combination = evaluation_tensor_product(&evaluation_point[log_row_length..].to_vec());
+    // Use Challenge to select columns from columns
+    let selected_columns: Vec<Vec<BinaryFieldElement16>> = challenges
+        .iter()
+        .map(|&c| columns[c as usize].clone())
+        .collect();
     // Each column is a vector of row_count uint16's. Convert each uint16 into bits
-    let column_bits: Vec<Vec<Vec<u8>>> = columns
+    let column_bits: Vec<Vec<Vec<u8>>> = selected_columns
         .iter()
         .map(|col| col.iter().map(|uint16| uint16_to_bit(uint16)).collect())
         .collect();
@@ -106,14 +114,22 @@ fn verify_optimized_binius_proof(proof: Proof) -> bool {
 #[cfg(test)]
 mod tests {
     use super::super::prover::prover;
-    use super::super::verifier::verify_optimized_binius_proof;
+    use super::super::verifier::verifier;
     use super::*;
 
     #[test]
-    fn test_verify_optimized_binius_proof() {
+    fn test_verifier() {
         let evaluations = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
         let evaluation_point = vec![1, 2, 3, 4, 5, 6, 7];
         let proof = prover(&evaluations, evaluation_point.clone());
-        assert!(verify_optimized_binius_proof(proof));
+        assert!(verifier(proof));
+    }
+
+    #[test]
+    fn test_big_data_verifier() {
+        let evaluations = vec![1; 1 << 20];
+        let evaluation_point = vec![1; 23];
+        let proof = prover(&evaluations, evaluation_point.clone());
+        assert!(verifier(proof));
     }
 }

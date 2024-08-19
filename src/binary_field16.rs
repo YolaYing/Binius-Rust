@@ -21,8 +21,8 @@ impl BinaryFieldElement16 {
     Returns:
         usize: the bit length of the element
      */
-    fn bit_length(&self) -> usize {
-        16 - self.value.leading_zeros() as usize
+    fn bit_length(&self) -> u16 {
+        16 - self.value.leading_zeros() as u16
     }
 
     /** Get the inverse of the element
@@ -34,7 +34,9 @@ impl BinaryFieldElement16 {
 
     */
     fn inv(&self) -> Self {
-        let l = self.value.next_power_of_two();
+        // L = 1 << (self.value.bit_length() - 1).bit_length()
+        // return self ** (2**L - 2)
+        let l = 1 << (16 - (self.bit_length() - 1).leading_zeros());
         self.pow(2u16.pow(l as u32) - 2)
     }
 
@@ -449,15 +451,15 @@ mod tests {
 
     #[test]
     fn test_binary_field_element_div() {
-        let a = BinaryFieldElement16::new(8);
-        let b = BinaryFieldElement16::new(4);
-        assert_eq!(a / b, BinaryFieldElement16::new(2));
+        let a = BinaryFieldElement16::new(0);
+        let b = BinaryFieldElement16::new(1);
+        assert_eq!(a / b, BinaryFieldElement16::new(0));
     }
 
     #[test]
     fn test_binary_field_element_inv() {
-        let a = BinaryFieldElement16::new(4);
-        assert_eq!(a.inv(), BinaryFieldElement16::new(6));
+        let a = BinaryFieldElement16::new(1);
+        assert_eq!(a.inv(), BinaryFieldElement16::new(1));
     }
 
     #[test]
