@@ -16,6 +16,7 @@
 //! - `big_mul`: Multiplies two large binary numbers.
 //! - `mul_by_Xi`: Multiplies a large binary number by `Xi`.
 
+use serde::{Deserialize, Serialize};
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
 /**
@@ -51,7 +52,7 @@ impl BinaryFieldElement16 {
         BinaryFieldElement: the inverse of the element
 
     */
-    fn inv(&self) -> Self {
+    pub fn inv(&self) -> Self {
         // L = 1 << (self.value.bit_length() - 1).bit_length()
         // return self ** (2**L - 2)
         let l = 1 << (16 - (self.bit_length() - 1).leading_zeros());
@@ -432,6 +433,48 @@ pub fn uint16_to_bit(value: &BinaryFieldElement16) -> Vec<u8> {
         result.push(((value.value >> i) & 1) as u8);
     }
     result
+}
+
+/** Implement the Serialize trait for BinaryFieldElement
+
+Serialize the element as a string
+
+Args:
+    serializer (S): the serializer
+
+Returns:
+    S::Ok: the serialized element
+
+*/
+impl Serialize for BinaryFieldElement16 {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&format!("{:X}", self.value))
+    }
+}
+
+/** Implement the Deserialize trait for BinaryFieldElement
+
+Deserialize the element from a string
+
+Args:
+    deserializer (D): the deserializer
+
+Returns:
+    Result<BinaryFieldElement, D::Error>: the deserialized element
+
+*/
+impl<'de> Deserialize<'de> for BinaryFieldElement16 {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        let value = u16::from_str_radix(&s, 16).map_err(serde::de::Error::custom)?;
+        Ok(BinaryFieldElement16 { value })
+    }
 }
 
 #[cfg(test)]
