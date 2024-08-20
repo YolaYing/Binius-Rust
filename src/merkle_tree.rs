@@ -1,3 +1,12 @@
+//! This module provides functionality for Merkle trees.
+//!
+//! The module provide the following functions:
+//! 1. hash: hash a byte array using SHA256
+//! 2. merkelize: build a Merkle tree from the inputs
+//! 3. get_root: return the root of the Merkle tree
+//! 4. get_branch: get the branch of the Merkle tree
+//! 5. verify_branch: verify the Merkle branch
+
 use sha2::{Digest, Sha256};
 
 pub fn hash(x: &[u8]) -> Vec<u8> {

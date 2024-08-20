@@ -1,3 +1,16 @@
+//! This module implements the efficient algorithms for the NTT in the binary field.
+//! The algorithms are based on the paper "Efficient Algorithms for Multilinear Forms in the Binary Field and
+//! Their Application to the Security of Cryptographic Primitives" by Jean-Charles Faugère, Ludovic Perret, and Frédéric de Portzamparc.
+//! The implementation refers to Vitalik's python implementation.
+//! The algorithms are used in the Binius to extend the rows of the matrix.
+//!
+//! This file contains the following functions:
+//! 1. WiEvalCache: a cache to store the evaluations of Wi(x), just left for the future use.
+//! 2. get_Wi_eval: calculate Wi(pt), the evaluations of Wi(x).
+//! 3. additive_ntt: Converts a polynomial with coefficients into evaluations.
+//! 4. inv_additive_ntt: Converts evaluations into a polynomial with coefficients.
+//! 5. extend: Reed-Solomon extension, using the efficient algorithms above.
+
 use crate::binary_field16::BinaryFieldElement16 as B16;
 use std::{collections::HashMap, num::ParseIntError};
 

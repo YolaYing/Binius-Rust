@@ -1,3 +1,8 @@
+//! This module functions as a random oracle to generate challenges.
+//! Prover and Verifier can obtain challenges in a deterministic manner.
+//! The challenges are derived from the root of the Merkle tree, and the returned results are the indexes of the columns.
+//! Note: This oracle is intended for testing purposes only. In a real-world scenario, it should be replaced by the Fiat-Shamir heuristic.
+
 use super::merkle_tree::hash;
 
 /** Get challenges from the root of the Merkle tree

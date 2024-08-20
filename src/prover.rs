@@ -1,3 +1,17 @@
+//! This module contains the prover implementation.
+//! The prover is responsible for generating the proof.
+//! The proof consists of the root of the Merkle tree, the evaluation, the t_prime, the columns, and the branches.
+//!
+//! The prover is implemented as a function that takes the evaluations and the evaluation point as input and returns the proof.
+//! The prover consists of the following steps:
+//! 1. Pack the evaluations into rows(the evaluations are nomarlly a list of u8s, and the rows are a list of lists of u16s).
+//! 2. Extend the rows using the Fast-Fourier extension.
+//! 3. Compute t_prime: linear combination of rows before extension.
+//! 4. Pack columns into a Merkle tree.
+//! 5. Get challenges.
+//! 6. Compute evaluation.
+//! 7. Return the proof.
+
 // const EXPANSION_FACTOR: usize = 4;
 // const NUM_CHALLENGES: usize = 2;
 // const PACKING_FACTOR: usize = 16;

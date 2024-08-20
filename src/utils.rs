@@ -1,3 +1,19 @@
+//! This module contains utility functions used by the prover and verifier.
+//!
+//! The functions in this module are used to perform various operations on the evaluations and the evaluations tensor product.
+//! The operations include packing the evaluations into rows, extending the rows, computing the t_prime, and computing the evaluation.
+//! In detail, the functions in this module are:
+//! 1. choose_row_length_and_count: Choose the row length and row count based on the log of the evaluation count.
+//! 2. pack_rows: Pack the evaluations into rows.
+//! 3. extend_rows: Extend the rows using the Fast-Fourier extension.
+//! 4. evaluation_tensor_product: Compute the tensor product of the evaluations.
+//! 5. xor_along_axis: Perform XOR along rows or columns.
+//! 6. transpose_bits: Transpose the matrix in the bit-level.
+//! 7. transpose: Transpose the matrix
+//! 8. computed_tprimes: Compute the t_prime.
+//! 9. multisubset: Compute the multisubset sum.
+//! 10. transpose_3d: Transpose the 3D matrix.
+
 use super::binary_field16::{big_mul, int_to_bigbin, uint16s_to_bits};
 use super::binary_ntt::extend;
 use crate::binary_field16::BinaryFieldElement16 as B16;

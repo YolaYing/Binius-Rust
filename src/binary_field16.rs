@@ -1,3 +1,21 @@
+//! This module defines the `BinaryFieldElement16` struct and its methods.
+//! The `BinaryFieldElement16` struct is a wrapper around `u16` and is used in the binary field.
+//! The binary field consists of two elements, 0 and 1, with operations defined as XOR, AND, and OR.
+//!
+//! The `BinaryFieldElement16` struct implements the following traits:
+//! - `Add`, `Sub`, `Mul`, `Div`, and `Neg` for arithmetic operations.
+//! - `FromIterator` to convert a vector of `BinaryFieldElement16` into a vector of `u8`.
+//! - `BigMul` to multiply two large binary numbers.
+//! - `ToU16` to convert a `BinaryFieldElement16` into a `u16`.
+//!
+//! Additionally, the `BinaryFieldElement16` struct provides the following functions:
+//! - `int_to_bigbin`: Converts a 128-bit integer into a length-8 vector of `u16`.
+//! - `uint16s_to_bits`: Converts a vector of `u16` into bits.
+//! - `uint16_to_bit`: Converts a `BinaryFieldElement16` into bits.
+//! - `bin_mul`: Multiplies two binary numbers in the binary tower field.
+//! - `big_mul`: Multiplies two large binary numbers.
+//! - `mul_by_Xi`: Multiplies a large binary number by `Xi`.
+
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
 /**
