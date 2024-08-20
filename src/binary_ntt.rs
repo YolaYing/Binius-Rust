@@ -137,9 +137,10 @@ Returns:
 */
 pub fn extend(data: Vec<B16>, expansion_factor: usize) -> Vec<B16> {
     let data = data;
-    let mut o = inv_additive_ntt(data.clone(), 0, &mut WiEvalCache::new());
+    let wi_eval_cache = &mut WiEvalCache::new();
+    let mut o = inv_additive_ntt(data.clone(), 0, wi_eval_cache);
     o.extend(vec![B16::new(0); data.len() * (expansion_factor - 1)]);
-    additive_ntt(o, 0, &mut WiEvalCache::new())
+    additive_ntt(o, 0, wi_eval_cache)
 }
 
 #[cfg(test)]
