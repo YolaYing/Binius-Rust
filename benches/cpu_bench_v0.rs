@@ -1,3 +1,5 @@
+//! This benchmark is used to record the vanilla version of Binius's performance.
+
 use binius_rust::prover::prover;
 use binius_rust::verifier::verifier;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};

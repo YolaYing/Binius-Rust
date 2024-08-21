@@ -8,7 +8,7 @@
 //! So there might be 3 ways to optimize the performance:
 //! 1. build a cache for Wi_eval(in this file)
 //! 2. additive ntt function and inverse additive ntt from recursive to iterative
-//! 3. build big mul cache
+//! 3. build big mul cache(not work)
 
 use super::binary_field16::BinaryFieldElement16 as B16;
 use lazy_static::lazy_static;
