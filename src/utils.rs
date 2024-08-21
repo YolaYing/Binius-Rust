@@ -15,8 +15,12 @@
 //! 10. transpose_3d: Transpose the 3D matrix.
 
 use super::binary_field16::{big_mul, int_to_bigbin, uint16s_to_bits};
-use super::binary_ntt::extend;
+// not use cache
+// use super::binary_ntt::extend;
+// use cache
+use super::binary_ntt_cache::extend;
 use crate::binary_field16::BinaryFieldElement16 as B16;
+use crate::binary_ntt::WiEvalCache;
 use std::convert::TryFrom;
 
 /** transfrom the evaluations into a specific matrix
