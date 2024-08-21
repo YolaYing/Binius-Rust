@@ -6,7 +6,7 @@
 //! 3. inverse additive ntt: takes 7% of the total time
 //!
 //! So there might be 3 ways to optimize the performance:
-//! 1. build a cache for Wi_eval
+//! 1. build a cache for Wi_eval(in this file)
 //! 2. additive ntt function and inverse additive ntt from recursive to iterative
 //! 3. build big mul cache
 

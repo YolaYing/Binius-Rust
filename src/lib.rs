@@ -1,4 +1,5 @@
 mod binary_field16;
+mod binary_field16_cache;
 mod binary_ntt;
 mod binary_ntt_cache;
 mod binary_ntt_cache_build_test;
