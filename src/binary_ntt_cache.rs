@@ -259,7 +259,7 @@ Args:
 Returns:
     the coefficients of the extended polynomial
 */
-pub fn extend(data: Vec<B16>, expansion_factor: usize) -> Vec<B16> {
+pub fn extend(data: &Vec<B16>, expansion_factor: usize) -> Vec<B16> {
     let data = data;
     let mut o = inv_additive_ntt(data.clone(), 0);
     o.extend(vec![B16::new(0); data.len() * (expansion_factor - 1)]);
@@ -311,7 +311,7 @@ mod tests {
     fn test_extend() {
         let data = vec![B16::new(1), B16::new(3), B16::new(9), B16::new(15)];
         let expansion_factor = 2;
-        let result = extend(data, expansion_factor);
+        let result = extend(&data, expansion_factor);
         assert_eq!(
             result,
             vec![
