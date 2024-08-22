@@ -210,10 +210,10 @@ Returns:
 // }
 
 // Optimized iterative version: save 15% of the time
-fn inv_additive_ntt(vals: Vec<B16>, start: usize) -> Vec<B16> {
+fn inv_additive_ntt(vals: &Vec<B16>, start: usize) -> Vec<B16> {
     let size = vals.len();
     if size == 1 {
-        return vals;
+        return vals.clone();
     }
 
     let mut results = vals.clone();
@@ -259,10 +259,25 @@ Args:
 Returns:
     the coefficients of the extended polynomial
 */
+// pub fn extend(data: &Vec<B16>, expansion_factor: usize) -> Vec<B16> {
+//     let data = data;
+//     let mut o = inv_additive_ntt(data.clone(), 0);
+//     o.extend(vec![B16::new(0); data.len() * (expansion_factor - 1)]);
+//     additive_ntt(&o, 0)
+// }
 pub fn extend(data: &Vec<B16>, expansion_factor: usize) -> Vec<B16> {
-    let data = data;
-    let mut o = inv_additive_ntt(data.clone(), 0);
-    o.extend(vec![B16::new(0); data.len() * (expansion_factor - 1)]);
+    // Avoid unnecessary clone by passing reference
+    let mut o = inv_additive_ntt(data, 0);
+
+    // Calculate the total length after expansion
+    let total_len = data.len() * expansion_factor;
+
+    // Pre-allocate the extended vector with the required capacity
+    o.reserve(total_len - o.len());
+
+    // Extend the vector with zeros
+    o.extend((0..(total_len - o.len())).map(|_| B16::new(0)));
+
     additive_ntt(&o, 0)
 }
 
@@ -300,7 +315,7 @@ mod tests {
     #[test]
     fn test_inv_additive_ntt() {
         let vals = vec![B16::new(1), B16::new(3), B16::new(9), B16::new(15)];
-        let result = inv_additive_ntt(vals, 0);
+        let result = inv_additive_ntt(&vals, 0);
         assert_eq!(
             result,
             vec![B16::new(1), B16::new(2), B16::new(3), B16::new(4)]
