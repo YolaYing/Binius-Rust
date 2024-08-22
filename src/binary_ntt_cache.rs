@@ -18,7 +18,7 @@ use std::fs;
 use std::sync::Mutex;
 
 lazy_static! {
-    static ref WI_EVAL_CACHE: Mutex<WiEvalCache> = Mutex::new(load_or_build_wi_eval_cache());
+    pub static ref WI_EVAL_CACHE: Mutex<WiEvalCache> = Mutex::new(load_or_build_wi_eval_cache());
 }
 const MAX_DIM: usize = 16;
 const MAX_SIZE: usize = 1 << MAX_DIM;
