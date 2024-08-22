@@ -304,27 +304,63 @@ impl<'a> BigMul for &'a Vec<u16> {
     }
 }
 
+// fn big_mul_impl(x1: &Vec<u16>, x2: &Vec<u16>) -> Vec<u16> {
+//     let n = x1.len();
+//     if n == 1 {
+//         return vec![bin_mul(x1[0], x2[0], None)];
+//     }
+//     let l1 = x1[..n / 2].to_vec();
+//     let l2 = x2[..n / 2].to_vec();
+//     let r1 = x1[n / 2..].to_vec();
+//     let r2 = x2[n / 2..].to_vec();
+//     let l1l2 = big_mul_impl(&l1, &l2);
+//     let r1r2 = big_mul_impl(&r1, &r2);
+//     let r1r2_high = mul_by_Xi(r1r2.clone(), n / 2);
+//     let z3 = big_mul_impl(
+//         &l1.iter().zip(r1.iter()).map(|(a, b)| a ^ b).collect(),
+//         &l2.iter().zip(r2.iter()).map(|(a, b)| a ^ b).collect(),
+//     );
+//     let part1 = l1l2
+//         .iter()
+//         .zip(r1r2.iter())
+//         .map(|(a, b)| a ^ b)
+//         .collect::<Vec<u16>>();
+//     let part2 = z3
+//         .iter()
+//         .zip(l1l2.iter())
+//         .zip(r1r2.iter())
+//         .zip(r1r2_high.iter())
+//         .map(|(((a, b), c), d)| a ^ b ^ c ^ d)
+//         .collect::<Vec<u16>>();
+//     let mut result = Vec::new();
+//     result.extend_from_slice(&part1);
+//     result.extend_from_slice(&part2);
+//     result
+// }
 fn big_mul_impl(x1: &Vec<u16>, x2: &Vec<u16>) -> Vec<u16> {
     let n = x1.len();
     if n == 1 {
         return vec![bin_mul(x1[0], x2[0], None)];
     }
-    let l1 = x1[..n / 2].to_vec();
-    let l2 = x2[..n / 2].to_vec();
-    let r1 = x1[n / 2..].to_vec();
-    let r2 = x2[n / 2..].to_vec();
-    let l1l2 = big_mul_impl(&l1, &l2);
-    let r1r2 = big_mul_impl(&r1, &r2);
-    let r1r2_high = mul_by_Xi(r1r2.clone(), n / 2);
+
+    let (l1, r1) = x1.split_at(n / 2);
+    let (l2, r2) = x2.split_at(n / 2);
+
+    let l1l2 = big_mul_impl(&l1.to_vec(), &l2.to_vec());
+    let r1r2 = big_mul_impl(&r1.to_vec(), &r2.to_vec());
+    let r1r2_high = mul_by_Xi(&r1r2.clone(), n / 2);
+
     let z3 = big_mul_impl(
         &l1.iter().zip(r1.iter()).map(|(a, b)| a ^ b).collect(),
         &l2.iter().zip(r2.iter()).map(|(a, b)| a ^ b).collect(),
     );
+
     let part1 = l1l2
         .iter()
         .zip(r1r2.iter())
         .map(|(a, b)| a ^ b)
         .collect::<Vec<u16>>();
+
     let part2 = z3
         .iter()
         .zip(l1l2.iter())
@@ -332,7 +368,8 @@ fn big_mul_impl(x1: &Vec<u16>, x2: &Vec<u16>) -> Vec<u16> {
         .zip(r1r2_high.iter())
         .map(|(((a, b), c), d)| a ^ b ^ c ^ d)
         .collect::<Vec<u16>>();
-    let mut result = Vec::new();
+
+    let mut result = Vec::with_capacity(part1.len() + part2.len());
     result.extend_from_slice(&part1);
     result.extend_from_slice(&part2);
     result
@@ -353,19 +390,37 @@ Args:
 Returns:
     Vec<u16>: the product of the big binary number and Xi
  */
-pub fn mul_by_Xi(x: Vec<u16>, n: usize) -> Vec<u16> {
+// pub fn mul_by_Xi(x: &Vec<u16>, n: usize) -> Vec<u16> {
+//     if x.len() == 1 {
+//         return vec![bin_mul(x[0], 256, None)];
+//     }
+//     let l = x[..n / 2].to_vec();
+//     let r = x[n / 2..].to_vec();
+//     let out_r = mul_by_Xi(&r, n / 2)
+//         .iter()
+//         .zip(l.iter())
+//         .map(|(a, b)| a ^ b)
+//         .collect::<Vec<u16>>();
+//     let mut result = Vec::new();
+//     result.extend_from_slice(&r);
+//     result.extend_from_slice(&out_r);
+//     result
+// }
+pub fn mul_by_Xi(x: &Vec<u16>, n: usize) -> Vec<u16> {
     if x.len() == 1 {
         return vec![bin_mul(x[0], 256, None)];
     }
-    let l = x[..n / 2].to_vec();
-    let r = x[n / 2..].to_vec();
-    let out_r = mul_by_Xi(r.clone(), n / 2)
+
+    let (l, r) = x.split_at(n / 2);
+
+    let out_r = mul_by_Xi(&r.to_vec(), n / 2)
         .iter()
         .zip(l.iter())
         .map(|(a, b)| a ^ b)
         .collect::<Vec<u16>>();
-    let mut result = Vec::new();
-    result.extend_from_slice(&r);
+
+    let mut result = Vec::with_capacity(x.len());
+    result.extend_from_slice(r);
     result.extend_from_slice(&out_r);
     result
 }

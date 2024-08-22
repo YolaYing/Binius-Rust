@@ -111,7 +111,6 @@ Returns:
  */
 // Optimized implementation, rows use reference to avoid use row.to_vec(), save 0.75% running time
 pub fn extend_rows(rows: &Vec<Vec<B16>>, expansion_factor: usize) -> Vec<Vec<B16>> {
-    let new_dimension = rows[0].len() * (expansion_factor - 1);
     // use extend function from binary_ntt.rs to extend each row and get the extended rows
     rows.iter()
         .map(|row| extend(row, expansion_factor))
