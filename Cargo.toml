@@ -10,6 +10,7 @@ sha2 = "0.10.8"
 lazy_static = "1.4.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+rayon = "1.7"
 
 [dev-dependencies]
 criterion = "0.5.0"
@@ -18,5 +19,5 @@ criterion = "0.5.0"
 debug = true
 
 [[bench]]
-name = "cpu_bench_v0"
+name = "cpu_bench_v1"
 harness = false

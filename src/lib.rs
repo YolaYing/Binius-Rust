@@ -1,10 +1,11 @@
 mod binary_field16;
-// mod binary_field16_cache;
 mod binary_ntt;
 pub mod binary_ntt_cache;
 mod binary_ntt_cache_build_test;
 mod challenger;
 mod merkle_tree;
+mod p_utils;
+pub mod pcs;
 pub mod prover;
 mod utils;
 pub mod verifier;
