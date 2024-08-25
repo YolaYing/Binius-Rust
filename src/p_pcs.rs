@@ -10,7 +10,7 @@ use p3_util::log2_strict_usize;
 use super::binary_field16::{big_mul, uint16_to_bit, uint16s_to_bits, BinaryFieldElement16};
 use super::challenger::get_challenges;
 use super::merkle_tree::{get_root, merkelize, verify_branch};
-use super::utils::{
+use super::p_utils::{
     choose_row_length_and_count, computed_tprimes, evaluation_tensor_product, extend_rows,
     multisubset, pack_row, pack_rows, transpose, transpose_3d, transpose_bits, xor_along_axis,
 };
