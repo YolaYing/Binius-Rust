@@ -410,35 +410,70 @@ Returns:
 // }
 
 // Optimized implementation: save 5% prover time, 4% verifier time
+// pub fn computed_tprimes(
+//     rows_as_bits_transpose: &Vec<Vec<u8>>,
+//     row_combination: &Vec<Vec<u16>>,
+// ) -> Vec<Vec<u16>> {
+//     let m = rows_as_bits_transpose.len();
+//     let num_bits = rows_as_bits_transpose[0].len() * 8;
+//     let k = row_combination[0].len();
+
+//     // optimization trick: pre-allocate the t_prime vector
+//     let mut t_prime = vec![vec![0u16; k]; m];
+//     // optimization trick: pre-allocate the multi_res vector
+//     let mut multi_res = vec![vec![0u16; num_bits]; m];
+
+//     // for each column of row_combination as comb, so we use j to iterate the columns
+//     for j in 0..k {
+//         // for each row in rows_as_bits_transpose, so we use i to iterate the rows
+//         for i in 0..m {
+//             for bit_pos in 0..num_bits {
+//                 let byte_index = bit_pos / 8;
+//                 let bit_index = 7 - (bit_pos % 8);
+//                 let bit = (rows_as_bits_transpose[i][byte_index] >> bit_index) & 1;
+//                 multi_res[i][bit_pos] = bit as u16 * row_combination[bit_pos][j];
+//             }
+//         }
+
+//         let xor_res = xor_along_axis(&multi_res, 1);
+
+//         for (i, res) in xor_res.iter().enumerate() {
+//             t_prime[i][j] ^= res;
+//         }
+//     }
+
+//     t_prime
+// }
+
+// Optimized implementation: save 24% prover time
 pub fn computed_tprimes(
     rows_as_bits_transpose: &Vec<Vec<u8>>,
     row_combination: &Vec<Vec<u16>>,
 ) -> Vec<Vec<u16>> {
     let m = rows_as_bits_transpose.len();
+    let num_bytes = rows_as_bits_transpose[0].len();
     let num_bits = rows_as_bits_transpose[0].len() * 8;
     let k = row_combination[0].len();
 
     // optimization trick: pre-allocate the t_prime vector
     let mut t_prime = vec![vec![0u16; k]; m];
-    // optimization trick: pre-allocate the multi_res vector
-    let mut multi_res = vec![vec![0u16; num_bits]; m];
 
     // for each column of row_combination as comb, so we use j to iterate the columns
     for j in 0..k {
         // for each row in rows_as_bits_transpose, so we use i to iterate the rows
         for i in 0..m {
+            let mut xor_res = 0u16;
+
             for bit_pos in 0..num_bits {
                 let byte_index = bit_pos / 8;
                 let bit_index = 7 - (bit_pos % 8);
-                let bit = (rows_as_bits_transpose[i][byte_index] >> bit_index) & 1;
-                multi_res[i][bit_pos] = bit as u16 * row_combination[bit_pos][j];
+                // optimization trick: avoid using multi_res and directly calculate the xor_res
+                if (rows_as_bits_transpose[i][byte_index] >> bit_index) & 1 == 1 {
+                    xor_res ^= row_combination[bit_pos][j];
+                }
             }
-        }
 
-        let xor_res = xor_along_axis(&multi_res, 1);
-
-        for (i, res) in xor_res.iter().enumerate() {
-            t_prime[i][j] ^= res;
+            t_prime[i][j] ^= xor_res;
         }
     }
 
