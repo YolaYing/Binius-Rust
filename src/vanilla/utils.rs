@@ -333,14 +333,34 @@ Args:
 Returns:
     the output, a list of list of u8, representing the transposed bits
  */
+// Original implementation
+// pub fn transpose_bits(input: Vec<Vec<u8>>) -> Vec<Vec<u8>> {
+//     let mut output = vec![vec![0u8; (input.len() + 7) / 8]; input[0].len()];
+//     for i in 0..input.len() {
+//         for j in 0..input[0].len() {
+//             //
+//             output[j][i / 8] |= (input[i][j] as u8) << ((input.len() - 1 - i) % 8);
+//         }
+//     }
+//     output
+// }
+
+// Optimized implementation
 pub fn transpose_bits(input: Vec<Vec<u8>>) -> Vec<Vec<u8>> {
-    let mut output = vec![vec![0u8; (input.len() + 7) / 8]; input[0].len()];
-    for i in 0..input.len() {
-        for j in 0..input[0].len() {
-            //
-            output[j][i / 8] |= (input[i][j] as u8) << ((input.len() - 1 - i) % 8);
+    let rows = input.len();
+    let cols = input[0].len();
+    let mut output = vec![vec![0u8; (rows + 7) / 8]; cols];
+
+    for i in 0..rows {
+        for j in 0..cols {
+            // optimization trick: avoid using get_unchecked_mut() and directly use unsafe code
+            unsafe {
+                *output.get_unchecked_mut(j).get_unchecked_mut(i / 8) |=
+                    (*input.get_unchecked(i).get_unchecked(j) as u8) << ((rows - 1 - i) % 8);
+            }
         }
     }
+
     output
 }
 /** transpose the matrix
