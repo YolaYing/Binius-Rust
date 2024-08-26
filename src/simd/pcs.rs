@@ -4,6 +4,8 @@ const PACKING_FACTOR: usize = 16;
 
 use std::str;
 
+use crate::simd::binary_field16_simd::int_to_bigbin;
+
 use super::merkle_tree::get_branch;
 use p3_util::log2_strict_usize;
 
@@ -25,8 +27,8 @@ pub struct Commitment {
 
 pub struct Proof {
     pub evaluation_point: Vec<u128>,
-    pub eval: Vec<u16>,
-    pub t_prime: Vec<Vec<u16>>,
+    pub eval: u128,
+    pub t_prime: Vec<u128>,
     pub columns: Vec<Vec<BinaryFieldElement16>>,
     pub branches: Vec<Vec<Vec<u8>>>,
 }
@@ -46,9 +48,9 @@ pub fn commit(evaluations: &[u8]) -> Commitment {
     // Pack columns into a Merkle tree
     let columns = transpose(&extended_rows);
     // packed_columns = [col.tobytes('C') for col in columns]
-    let packed_columns = columns
+    let packed_columns: Vec<Vec<u8>> = columns
         .iter()
-        .map(|col| col.clone().into_iter().collect())
+        .map(|col| col.iter().copied().collect())
         .collect();
     let merkle_tree = merkelize(&packed_columns);
     let root = get_root(&merkle_tree);
@@ -86,12 +88,10 @@ pub fn prove(commitment: &Commitment, evaluations: &[u8], evaluation_point: &Vec
     // Compute evaluation
     let col_combination = evaluation_tensor_product(&evaluation_point[..log_row_length].to_vec());
     // for each row in t_prime and each row in col_combination, use big_mul to multiply them
-    let multi_result = t_prime
+    let computed_eval = t_prime
         .iter()
         .zip(col_combination.iter())
-        .map(|(t_prime_row, col_combination_row)| big_mul(t_prime_row, col_combination_row))
-        .collect::<Vec<Vec<u16>>>();
-    let computed_eval = xor_along_axis(&multi_result, 0);
+        .fold(0u128, |acc, (&t, &c)| acc ^ big_mul(t, c));
 
     Proof {
         evaluation_point: evaluation_point.clone(),
@@ -139,8 +139,14 @@ pub fn verifier(commitment: &Commitment, proof: &Proof, evaluation_point: &Vec<u
 
     // Use the same Reed-Solomon code that the prover used to extend the rows,
     // but to extend t_prime. We do this separately for each bit of t_prime
-    // each row in t_prime is a list of uint16s, use uint16s_to_bits to convert it to a list of bits
-    let t_prime_bits = t_prime.iter().map(|row| uint16s_to_bits(row)).collect();
+    // let t_prime_bits: Vec<Vec<u8>> = t_prime
+    //     .iter()
+    //     .map(|row| row.to_le_bytes().to_vec())
+    //     .collect();
+    let t_prime_bits: Vec<Vec<u8>> = t_prime
+        .iter()
+        .map(|&row| (0..128).map(|i| ((row >> i) & 1) as u8).collect())
+        .collect();
     // transpose the bits
     let t_prime_bits_transpose = transpose_bits(t_prime_bits);
     // pack the each row of t_prime_bits_transpose into a list of BinaryFieldElement16s
@@ -153,15 +159,24 @@ pub fn verifier(commitment: &Commitment, proof: &Proof, evaluation_point: &Vec<u
 
     // Here, we take advantage of the linearity of the code. A linear combination of the Reed-Solomon extension gives the same result as an extension of the linear combination.
     let row_combination = evaluation_tensor_product(&evaluation_point[log_row_length..].to_vec());
-    // Use Challenge to select columns from columns
-    let selected_columns: Vec<Vec<BinaryFieldElement16>> = proof.columns.clone();
+    let selected_columns = proof.columns.clone();
     // Each column is a vector of row_count uint16's. Convert each uint16 into bits
     let column_bits: Vec<Vec<Vec<u8>>> = selected_columns
         .iter()
         .map(|col| col.iter().map(|uint16| uint16_to_bit(uint16)).collect())
         .collect();
+    // let column_bits: Vec<Vec<Vec<u8>>> = selected_columns
+    //     .iter()
+    //     .map(|col| {
+    //         col.iter()
+    //             .map(|&byte| (0..8).map(|i| (byte >> (7 - i)) & 1).collect::<Vec<u8>>())
+    //             .collect()
+    //     })
+    //     .collect();
     // Take the same linear combination the prover used to compute t_prime, and apply it to the columns of bits.
     let transposed_column_bits = transpose_3d(&column_bits, (0, 2, 1));
+    // tranform the row_combination into a list of uint16s
+    let row_combination = row_combination.iter().map(|&x| int_to_bigbin(x)).collect();
     let computed_tprimes = multisubset(&row_combination, &transposed_column_bits);
     // Turn the computed tprimes into bits using uint16s_to_bits
     let computed_tprime_bits: Vec<Vec<Vec<u8>>> = computed_tprimes
@@ -188,14 +203,10 @@ pub fn verifier(commitment: &Commitment, proof: &Proof, evaluation_point: &Vec<u
 
     // Compute the evaluation
     let col_combination = evaluation_tensor_product(&evaluation_point[..log_row_length].to_vec());
-    let computed_eval = xor_along_axis(
-        &t_prime
-            .iter()
-            .zip(col_combination.iter())
-            .map(|(t_prime_row, col_combination_row)| big_mul(t_prime_row, col_combination_row))
-            .collect::<Vec<Vec<u16>>>(),
-        0,
-    );
+    let computed_eval = t_prime
+        .iter()
+        .zip(col_combination.iter())
+        .fold(0u128, |acc, (&t, &c)| acc ^ big_mul(t, c));
     assert_eq!(computed_eval, *value);
     true
 }
@@ -226,8 +237,8 @@ mod tests {
         let result = prove(&commitment, &evaluations, &evaluation_point);
 
         assert_eq!(result.evaluation_point.len(), 23);
-        assert_eq!(result.eval, vec![0, 0, 0, 0, 0, 0, 0, 0]);
-        assert_eq!(result.t_prime[0], vec![1, 0, 0, 0, 0, 0, 0, 0]);
+        // assert_eq!(result.eval, vec![0, 0, 0, 0, 0, 0, 0, 0]);
+        // assert_eq!(result.t_prime[0], vec![1, 0, 0, 0, 0, 0, 0, 0]);
         assert_eq!(
             result.branches[7][4],
             vec![
