@@ -22,7 +22,7 @@ const PACKING_FACTOR: usize = 16;
 use crate::merkle_tree::get_branch;
 use p3_util::log2_strict_usize;
 
-use super::binary_field16::{big_mul, uint16s_to_bits, BinaryFieldElement16};
+use super::binary_field16_simd::{big_mul, uint16s_to_bits, BinaryFieldElement16};
 use super::challenger::get_challenges;
 use super::merkle_tree::{get_root, merkelize};
 use super::utils::{

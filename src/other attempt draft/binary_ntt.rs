@@ -11,7 +11,7 @@
 //! 4. inv_additive_ntt: Converts evaluations into a polynomial with coefficients.
 //! 5. extend: Reed-Solomon extension, using the efficient algorithms above.
 
-use crate::binary_field16::BinaryFieldElement16 as B16;
+use crate::binary_field16_simd::BinaryFieldElement16 as B16;
 use std::{collections::HashMap, num::ParseIntError};
 
 pub struct WiEvalCache {

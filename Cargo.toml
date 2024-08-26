@@ -19,5 +19,5 @@ criterion = "0.5.0"
 debug = true
 
 [[bench]]
-name = "cpu_bench_v1"
+name = "cpu_bench_simd"
 harness = false

@@ -18,9 +18,8 @@ use super::binary_field16::{big_mul, int_to_bigbin, uint16s_to_bits};
 // not use cache
 // use super::binary_ntt::extend;
 // use cache
-use super::binary_ntt_cache::extend;
-use crate::binary_field16::BinaryFieldElement16 as B16;
-use crate::binary_ntt::WiEvalCache;
+use super::binary_field16::BinaryFieldElement16 as B16;
+use super::binary_ntt_cache::{extend, WiEvalCache};
 use std::convert::TryFrom;
 
 /** transfrom the evaluations into a specific matrix
@@ -451,7 +450,6 @@ pub fn computed_tprimes(
     row_combination: &Vec<Vec<u16>>,
 ) -> Vec<Vec<u16>> {
     let m = rows_as_bits_transpose.len();
-    let num_bytes = rows_as_bits_transpose[0].len();
     let num_bits = rows_as_bits_transpose[0].len() * 8;
     let k = row_combination[0].len();
 

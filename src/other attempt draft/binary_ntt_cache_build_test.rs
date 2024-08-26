@@ -1,4 +1,4 @@
-use super::binary_field16::BinaryFieldElement16 as B16;
+use super::binary_field16_simd::BinaryFieldElement16 as B16;
 use super::binary_ntt_cache::WiEvalCache;
 use lazy_static::lazy_static;
 use std::fs;

@@ -19,7 +19,7 @@ const PACKING_FACTOR: usize = 16;
 
 use sha2::digest::typenum::uint;
 
-use super::binary_field16::{big_mul, uint16_to_bit, uint16s_to_bits, BinaryFieldElement16};
+use super::binary_field16_simd::{big_mul, uint16_to_bit, uint16s_to_bits, BinaryFieldElement16};
 use super::challenger::get_challenges;
 use super::merkle_tree::verify_branch;
 use super::prover::Proof;

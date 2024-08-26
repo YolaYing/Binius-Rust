@@ -444,6 +444,12 @@ pub fn int_to_bigbin(x: u128) -> Vec<u16> {
     result
 }
 
+pub fn bigbin_to_int(x: &Vec<u16>) -> u128 {
+    x.iter()
+        .enumerate()
+        .fold(0, |acc, (i, &v)| acc | ((v as u128) << (i * 16)))
+}
+
 /** Convert a vector of uint16's into bits
 
 right shift the uint16 by 1 bit each time, and take the last bit as the bit

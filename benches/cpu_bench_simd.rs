@@ -1,5 +1,5 @@
-use binius_rust::vanilla::binary_ntt_cache::WI_EVAL_CACHE;
-use binius_rust::vanilla::pcs::{commit, prove, verifier};
+use binius_rust::simd::binary_ntt_cache::WI_EVAL_CACHE;
+use binius_rust::simd::pcs::{commit, prove, verifier};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 fn benchmark_commit(c: &mut Criterion) {
