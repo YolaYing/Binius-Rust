@@ -46,9 +46,13 @@ pub fn commit(evaluations: &[u8]) -> Commitment {
     // Pack columns into a Merkle tree
     let columns = transpose(&extended_rows);
     // packed_columns = [col.tobytes('C') for col in columns]
-    let packed_columns = columns
+    // let packed_columns = columns
+    //     .iter()
+    //     .map(|col| col.clone().into_iter().collect())
+    //     .collect();
+    let packed_columns: Vec<Vec<u8>> = columns
         .iter()
-        .map(|col| col.clone().into_iter().collect())
+        .map(|col| col.iter().copied().collect())
         .collect();
     let merkle_tree = merkelize(&packed_columns);
     let root = get_root(&merkle_tree);
@@ -140,7 +144,8 @@ pub fn verifier(commitment: &Commitment, proof: &Proof, evaluation_point: &Vec<u
     // Use the same Reed-Solomon code that the prover used to extend the rows,
     // but to extend t_prime. We do this separately for each bit of t_prime
     // each row in t_prime is a list of uint16s, use uint16s_to_bits to convert it to a list of bits
-    let t_prime_bits = t_prime.iter().map(|row| uint16s_to_bits(row)).collect();
+    let t_prime_bits: Vec<Vec<u8>> = t_prime.iter().map(|row| uint16s_to_bits(row)).collect();
+
     // transpose the bits
     let t_prime_bits_transpose = transpose_bits(t_prime_bits);
     // pack the each row of t_prime_bits_transpose into a list of BinaryFieldElement16s
