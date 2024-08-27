@@ -369,6 +369,46 @@ Returns:
 // }
 
 // Optimized implementation
+// pub fn transpose_bits(input: Vec<Vec<u8>>) -> Vec<Vec<u8>> {
+//     let rows = input.len();
+//     let cols = input[0].len() * 8;
+//     let mut output = vec![vec![0u8; (rows + 7) / 8]; cols];
+
+//     for i in 0..rows {
+//         for j in 0..cols {
+//             // optimization trick: avoid using get_unchecked_mut() and directly use unsafe code
+//             unsafe {
+//                 *output.get_unchecked_mut(j).get_unchecked_mut(i / 8) |=
+//                     (*input.get_unchecked(i).get_unchecked(j / 8) as u8) << ((rows - 1 - i) % 8);
+//             }
+//         }
+//     }
+
+//     output
+// }
+
+// try to fit in u8
+// pub fn transpose_bits(input: Vec<Vec<u8>>) -> Vec<Vec<u8>> {
+//     let rows = input.len();
+//     let cols = input[0].len() * 8;
+//     let mut output = vec![vec![0u8; (rows + 7) / 8]; cols];
+
+//     for i in 0..rows {
+//         for j in 0..cols {
+//             // optimization trick: avoid using get_unchecked_mut() and directly use unsafe code
+//             unsafe {
+//                 // *output.get_unchecked_mut(j).get_unchecked_mut(i / 8) |=
+//                 //     (*input.get_unchecked(i).get_unchecked(j / 8) as u8) << ((rows - 1 - i) % 8);
+//                 let input_value = *input.get_unchecked(i).get_unchecked(j / 8) as u8;
+//                 let bit = (input_value >> (7 - (j % 8))) & 1;
+//                 *output.get_unchecked_mut(j).get_unchecked_mut(i / 8) |= bit << (7 - (i % 8));
+//             }
+//         }
+//     }
+
+//     output
+// }
+
 pub fn transpose_bits(input: Vec<Vec<u8>>) -> Vec<Vec<u8>> {
     let rows = input.len();
     let cols = input[0].len();
@@ -674,13 +714,23 @@ mod tests {
     #[test]
     fn test_transpose_bits() {
         let data = vec![
-            vec![B16::new(1), B16::new(3)],
-            vec![B16::new(9), B16::new(15)],
+            vec![B16::new(65535)],
+            vec![B16::new(0)],
+            vec![B16::new(0)],
+            vec![B16::new(0)],
+            vec![B16::new(65535)],
+            vec![B16::new(0)],
+            vec![B16::new(0)],
+            vec![B16::new(65535)],
         ];
         // use uint16s_to_bits to convert the data into bits row by row
         let input = data.iter().map(|row| uint16s_to_bits(row)).collect();
+        println!("{:?}", input);
         let output = transpose_bits(input);
-        assert_eq!(output[0], [3]);
+        println!("{:?}", output);
+        println!("{:?}", output.len());
+        assert_eq!(output[0], [137]);
+        assert_eq!(output[1], [137]);
     }
 
     #[test]

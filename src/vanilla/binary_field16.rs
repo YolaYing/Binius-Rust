@@ -511,6 +511,21 @@ pub fn uint16s_to_bits<T: ToU16>(data: &Vec<T>) -> Vec<u8> {
     result
 }
 
+// pub fn uint16s_to_bits<T: ToU16>(data: &Vec<T>) -> Vec<u8> {
+//     // 每个u16需要2个u8来存储，最后会有16个bit转换成2个u8
+//     let mut result = Vec::with_capacity(data.len() * 2);
+
+//     for value in data {
+//         let value_u16 = value.to_u16();
+
+//         // 拆分为两个u8并推入结果向量
+//         result.push((value_u16 & 0xFF) as u8); // 低8位
+//         result.push((value_u16 >> 8) as u8); // 高8位
+//     }
+
+//     result
+// }
+
 pub fn uint16_to_bit(value: &BinaryFieldElement16) -> Vec<u8> {
     let mut result = Vec::with_capacity(16);
     for i in 0..16 {
@@ -518,6 +533,12 @@ pub fn uint16_to_bit(value: &BinaryFieldElement16) -> Vec<u8> {
     }
     result
 }
+// pub fn uint16_to_bit(value: &BinaryFieldElement16) -> Vec<u8> {
+//     let mut result = Vec::with_capacity(2);
+//     result.push((value.value & 0xFF) as u8);
+//     result.push((value.value >> 8) as u8);
+//     result
+// }
 
 /** Implement the Serialize trait for BinaryFieldElement
 
@@ -629,19 +650,13 @@ mod tests {
     fn test_uint16s_to_bits() {
         let data = vec![BinaryFieldElement16::new(1u16)];
         let result = uint16s_to_bits(&data);
-        assert_eq!(result, vec![1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        assert_eq!(result, vec![1u8, 0u8]);
         // test on [[1,3]],check result != [1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0]
         let data = vec![
             BinaryFieldElement16::new(1u16),
             BinaryFieldElement16::new(3u16),
         ];
         let result = uint16s_to_bits(&data);
-        assert_eq!(
-            result,
-            vec![
-                1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0
-            ]
-        );
+        assert_eq!(result, vec![1u8, 0u8, 3u8, 0u8]);
     }
 }

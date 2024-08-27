@@ -225,7 +225,7 @@ mod tests {
 
     #[test]
     fn test_prove() {
-        let evaluations = vec![1; 1 << 20];
+        let evaluations = vec![1u8; 1 << 20];
         let commitment = commit(&evaluations);
         let evaluation_point = vec![1; 23];
         let result = prove(&commitment, &evaluations, &evaluation_point);

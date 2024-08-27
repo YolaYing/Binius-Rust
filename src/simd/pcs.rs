@@ -139,6 +139,7 @@ pub fn verifier(commitment: &Commitment, proof: &Proof, evaluation_point: &Vec<u
 
     // Use the same Reed-Solomon code that the prover used to extend the rows,
     // but to extend t_prime. We do this separately for each bit of t_prime
+    // try to use u8
     // let t_prime_bits: Vec<Vec<u8>> = t_prime
     //     .iter()
     //     .map(|row| row.to_le_bytes().to_vec())
@@ -156,34 +157,6 @@ pub fn verifier(commitment: &Commitment, proof: &Proof, evaluation_point: &Vec<u
         .collect();
     // extend the rows
     let extended_t_prime_columns = extend_rows(&t_prime_columns, EXPANSION_FACTOR);
-
-    // Here, we take advantage of the linearity of the code. A linear combination of the Reed-Solomon extension gives the same result as an extension of the linear combination.
-    let row_combination = evaluation_tensor_product(&evaluation_point[log_row_length..].to_vec());
-    let selected_columns = proof.columns.clone();
-    // Each column is a vector of row_count uint16's. Convert each uint16 into bits
-    let column_bits: Vec<Vec<Vec<u8>>> = selected_columns
-        .iter()
-        .map(|col| col.iter().map(|uint16| uint16_to_bit(uint16)).collect())
-        .collect();
-    // let column_bits: Vec<Vec<Vec<u8>>> = selected_columns
-    //     .iter()
-    //     .map(|col| {
-    //         col.iter()
-    //             .map(|&byte| (0..8).map(|i| (byte >> (7 - i)) & 1).collect::<Vec<u8>>())
-    //             .collect()
-    //     })
-    //     .collect();
-    // Take the same linear combination the prover used to compute t_prime, and apply it to the columns of bits.
-    let transposed_column_bits = transpose_3d(&column_bits, (0, 2, 1));
-    // tranform the row_combination into a list of uint16s
-    let row_combination = row_combination.iter().map(|&x| int_to_bigbin(x)).collect();
-    let computed_tprimes = multisubset(&row_combination, &transposed_column_bits);
-    // Turn the computed tprimes into bits using uint16s_to_bits
-    let computed_tprime_bits: Vec<Vec<Vec<u8>>> = computed_tprimes
-        .iter()
-        .map(|row| row.iter().map(|uint16| uint16s_to_bits(uint16)).collect())
-        .collect();
-
     // Convert our FFT-extended t_prime rows into bits
     // step 1: use challenge to select columns, and convert to bits
     let extended_t_prime_columns_slices: Vec<Vec<Vec<BinaryFieldElement16>>> =
@@ -198,6 +171,24 @@ pub fn verifier(commitment: &Commitment, proof: &Proof, evaluation_point: &Vec<u
     // step 2: transpose the bits
     let extended_t_prime_bits_transpose = transpose_3d(&extended_t_prime_bits, (1, 2, 0));
 
+    // Here, we take advantage of the linearity of the code. A linear combination of the Reed-Solomon extension gives the same result as an extension of the linear combination.
+    let row_combination = evaluation_tensor_product(&evaluation_point[log_row_length..].to_vec());
+    let selected_columns = proof.columns.clone();
+    // Each column is a vector of row_count uint16's. Convert each uint16 into bits
+    let column_bits: Vec<Vec<Vec<u8>>> = selected_columns
+        .iter()
+        .map(|col| col.iter().map(|uint16| uint16_to_bit(uint16)).collect())
+        .collect();
+    // Take the same linear combination the prover used to compute t_prime, and apply it to the columns of bits.
+    let transposed_column_bits = transpose_3d(&column_bits, (0, 2, 1));
+    // tranform the row_combination into a list of uint16s
+    let row_combination = row_combination.iter().map(|&x| int_to_bigbin(x)).collect();
+    let computed_tprimes = multisubset(&row_combination, &transposed_column_bits);
+    // Turn the computed tprimes into bits using uint16s_to_bits
+    let computed_tprime_bits: Vec<Vec<Vec<u8>>> = computed_tprimes
+        .iter()
+        .map(|row| row.iter().map(|uint16| uint16s_to_bits(uint16)).collect())
+        .collect();
     // The bits of the t_prime extension should equal the bits of the row linear combination of the column bits
     assert_eq!(computed_tprime_bits, extended_t_prime_bits_transpose);
 

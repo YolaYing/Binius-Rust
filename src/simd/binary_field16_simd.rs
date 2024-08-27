@@ -604,6 +604,50 @@ impl ToU16 for BinaryFieldElement16 {
 // }
 
 // optimized implementation
+// pub fn uint16s_to_bits<T: ToU16>(data: &Vec<T>) -> Vec<u8> {
+//     let len = data.len() * 16;
+//     let mut result = Vec::with_capacity(len);
+
+//     // optimize trick: use unsafe code directly to avoid the overhead of bounds checking
+//     unsafe {
+//         result.set_len(len);
+//         let mut index = 0;
+//         for value in data {
+//             let value_u16 = value.to_u16();
+//             for i in 0..16 {
+//                 *result.get_unchecked_mut(index) = ((value_u16 >> i) & 1) as u8;
+//                 index += 1;
+//             }
+//         }
+//     }
+
+//     result
+// }
+
+// pub fn uint16_to_bit(value: &BinaryFieldElement16) -> Vec<u8> {
+//     let mut result = Vec::with_capacity(16);
+//     for i in 0..16 {
+//         result.push(((value.value >> i) & 1) as u8);
+//     }
+//     result
+// }
+
+// try to use u8
+// pub fn uint16s_to_bits<T: ToU16>(data: &Vec<T>) -> Vec<u8> {
+//     // 每个u16需要2个u8来存储，最后会有16个bit转换成2个u8
+//     let mut result = Vec::with_capacity(data.len() * 2);
+
+//     for value in data {
+//         let value_u16 = value.to_u16();
+
+//         // 拆分为两个u8并推入结果向量
+//         result.push((value_u16 & 0xFF) as u8); // 低8位
+//         result.push((value_u16 >> 8) as u8); // 高8位
+//     }
+
+//     result
+// }
+
 pub fn uint16s_to_bits<T: ToU16>(data: &Vec<T>) -> Vec<u8> {
     let len = data.len() * 16;
     let mut result = Vec::with_capacity(len);
@@ -624,6 +668,14 @@ pub fn uint16s_to_bits<T: ToU16>(data: &Vec<T>) -> Vec<u8> {
     result
 }
 
+// try to use u8
+// pub fn uint16_to_bit(value: &BinaryFieldElement16) -> Vec<u8> {
+//     let mut result = Vec::with_capacity(2);
+//     result.push((value.value & 0xFF) as u8);
+//     result.push((value.value >> 8) as u8);
+//     result
+// }
+
 pub fn uint16_to_bit(value: &BinaryFieldElement16) -> Vec<u8> {
     let mut result = Vec::with_capacity(16);
     for i in 0..16 {
@@ -631,16 +683,6 @@ pub fn uint16_to_bit(value: &BinaryFieldElement16) -> Vec<u8> {
     }
     result
 }
-// pub fn uint16_to_bit(value: &BinaryFieldElement16) -> Vec<u8> {
-//     let mut result = Vec::with_capacity(2);
-//     let byte1 = (value.value & 0xFF) as u8;
-//     let byte2 = ((value.value >> 8) & 0xFF) as u8;
-
-//     result.push(byte1);
-//     result.push(byte2);
-//     result
-// }
-
 /** Implement the Serialize trait for BinaryFieldElement
 
 Serialize the element as a string
