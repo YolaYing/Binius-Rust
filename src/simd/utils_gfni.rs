@@ -19,7 +19,9 @@ use super::binary_field16_simd_gfni_x86::{big_mul, int_to_bigbin, uint16s_to_bit
 // use super::binary_ntt::extend;
 // use cache
 use super::binary_field16_simd_gfni_x86::BinaryFieldElement16 as B16;
-use super::binary_ntt_cache::{extend, WiEvalCache};
+use super::binary_ntt_cache_gfni::{extend, WiEvalCache};
+#[cfg(target_arch = "x86_64")]
+use core::arch::x86_64::*;
 use std::convert::TryFrom;
 
 /** transfrom the evaluations into a specific matrix
@@ -177,29 +179,69 @@ Returns:
 //     }
 //     o
 // }
+// pub fn evaluation_tensor_product(eval_point: &Vec<u128>) -> Vec<u128> {
+//     // directly use u128 as the element of eval_point
+//     let mut o = vec![1u128];
+
+//     for &coord in eval_point {
+//         // pre-allocate the o_times_coord vector
+//         let mut o_times_coord = Vec::with_capacity(o.len());
+
+//         // for all the element in o, conduct big_mul for the element and &int_to_bigbin(coord)
+//         for &x in &o {
+//             o_times_coord.push(big_mul(x, coord));
+//         }
+
+//         let mut new_o = Vec::with_capacity(o.len() * 2);
+//         for (&x, &y) in o.iter().zip(o_times_coord.iter()) {
+//             new_o.push(x ^ y);
+//         }
+//         new_o.extend(o_times_coord);
+//         o = new_o;
+//     }
+
+//     // convert the u128 to Vec<u16>
+//     o
+// }
 pub fn evaluation_tensor_product(eval_point: &Vec<u128>) -> Vec<u128> {
-    // directly use u128 as the element of eval_point
-    let mut o = vec![1u128];
+    let mut o = vec![1u128]; // Initialize with 1
 
     for &coord in eval_point {
-        // pre-allocate the o_times_coord vector
-        let mut o_times_coord = Vec::with_capacity(o.len());
+        let len = o.len();
+        o.resize(len * 2, 0);
 
-        // for all the element in o, conduct big_mul for the element and &int_to_bigbin(coord)
-        for &x in &o {
-            o_times_coord.push(big_mul(x, coord));
+        #[cfg(all(target_arch = "x86_64", target_feature = "gfni"))]
+        unsafe {
+            vectorized_tensor_product(&mut o[..len], coord);
         }
 
-        let mut new_o = Vec::with_capacity(o.len() * 2);
-        for (&x, &y) in o.iter().zip(o_times_coord.iter()) {
-            new_o.push(x ^ y);
+        #[cfg(not(all(target_arch = "x86_64", target_feature = "gfni")))]
+        {
+            // Use vanilla implementation for fallback
+            let mut o_times_coord = Vec::with_capacity(len);
+
+            for &x in &o[..len] {
+                o_times_coord.push(big_mul(x, coord));
+            }
+
+            // Replace the original segment with combined results
+            for (i, &y) in o_times_coord.iter().enumerate() {
+                o[len + i] = o[i] ^ y;
+            }
         }
-        new_o.extend(o_times_coord);
-        o = new_o;
     }
 
-    // convert the u128 to Vec<u16>
     o
+}
+#[cfg(all(target_arch = "x86_64", target_feature = "gfni"))]
+#[inline(always)]
+unsafe fn vectorized_tensor_product(o: &mut Vec<u128>, coord: u128) {
+    let coord_vec = _mm_set1_epi64x(coord as i64);
+    o.chunks_exact_mut(2).for_each(|chunk| {
+        let x_vec = _mm_loadu_si128(chunk.as_ptr() as *const __m128i);
+        let prod = _mm_gf2p8mul_epi8(x_vec, coord_vec);
+        _mm_storeu_si128(chunk.as_mut_ptr() as *mut __m128i, prod);
+    });
 }
 
 /** XOR along axis
@@ -245,27 +287,120 @@ Returns:
 // }
 
 // Optimized implementation(takes 0.5% running time)
+// pub fn xor_along_axis(values: &[Vec<u16>], axis: usize) -> Vec<u16> {
+//     let (rows, _cols) = (values.len(), values[0].len());
+//     // optimization trick: pre-allocate the result vector
+//     let mut result = vec![0u16; rows];
+
+//     match axis {
+//         0 => {
+//             // XOR along rows (axis=0)
+//             result = values[0].clone();
+//             for row in &values[1..] {
+//                 for (res, &val) in result.iter_mut().zip(row.iter()) {
+//                     *res ^= val;
+//                 }
+//             }
+//         }
+//         1 => {
+//             // XOR along columns (axis=1)
+//             // optimized trick: cache friendly iteration, iterate over rows first
+//             for row in 0..rows {
+//                 for (_col, val) in values[row].iter().enumerate() {
+//                     result[row] ^= val;
+//                 }
+//             }
+//         }
+//         _ => panic!("Unsupported axis"),
+//     }
+
+//     result
+// }
+
 pub fn xor_along_axis(values: &[Vec<u16>], axis: usize) -> Vec<u16> {
-    let (rows, _cols) = (values.len(), values[0].len());
-    // optimization trick: pre-allocate the result vector
-    let mut result = vec![0u16; rows];
+    let (rows, cols) = (values.len(), values[0].len());
+
+    // Pre-allocate the result vector
+    let mut result = vec![
+        0u16;
+        match axis {
+            0 => cols,
+            1 => rows,
+            _ => panic!("Unsupported axis"),
+        }
+    ];
 
     match axis {
         0 => {
             // XOR along rows (axis=0)
-            result = values[0].clone();
-            for row in &values[1..] {
-                for (res, &val) in result.iter_mut().zip(row.iter()) {
-                    *res ^= val;
+            result.copy_from_slice(&values[0]); // Initialize with the first row
+
+            #[cfg(target_feature = "sse2")]
+            unsafe {
+                for row in &values[1..] {
+                    // SIMD XOR processing
+                    let mut i = 0;
+                    while i + 8 <= cols {
+                        // Load 8 elements at a time
+                        let res_vec = _mm_loadu_si128(result[i..].as_ptr() as *const __m128i);
+                        let row_vec = _mm_loadu_si128(row[i..].as_ptr() as *const __m128i);
+
+                        // Perform XOR
+                        let xor_vec = _mm_xor_si128(res_vec, row_vec);
+
+                        // Store result back
+                        _mm_storeu_si128(result[i..].as_mut_ptr() as *mut __m128i, xor_vec);
+
+                        i += 8; // Advance by SIMD width
+                    }
+
+                    // Handle the remaining elements
+                    for j in i..cols {
+                        result[j] ^= row[j];
+                    }
+                }
+            }
+
+            #[cfg(not(target_feature = "sse2"))]
+            {
+                for row in &values[1..] {
+                    for (res, &val) in result.iter_mut().zip(row.iter()) {
+                        *res ^= val;
+                    }
                 }
             }
         }
         1 => {
             // XOR along columns (axis=1)
-            // optimized trick: cache friendly iteration, iterate over rows first
             for row in 0..rows {
-                for (_col, val) in values[row].iter().enumerate() {
-                    result[row] ^= val;
+                #[cfg(target_feature = "sse2")]
+                unsafe {
+                    let mut i = 0;
+                    while i + 8 <= cols {
+                        // Load 8 elements at a time
+                        let res_vec = _mm_loadu_si128(result[row..].as_ptr() as *const __m128i);
+                        let row_vec = _mm_loadu_si128(values[row][i..].as_ptr() as *const __m128i);
+
+                        // Perform XOR
+                        let xor_vec = _mm_xor_si128(res_vec, row_vec);
+
+                        // Store result back
+                        _mm_storeu_si128(result[row..].as_mut_ptr() as *mut __m128i, xor_vec);
+
+                        i += 8; // Advance by SIMD width
+                    }
+
+                    // Handle the remaining elements
+                    for j in i..cols {
+                        result[row] ^= values[row][j];
+                    }
+                }
+
+                #[cfg(not(target_feature = "sse2"))]
+                {
+                    for (_col, &val) in values[row].iter().enumerate() {
+                        result[row] ^= val;
+                    }
                 }
             }
         }
@@ -275,75 +410,267 @@ pub fn xor_along_axis(values: &[Vec<u16>], axis: usize) -> Vec<u16> {
     result
 }
 
-fn xor_along_axis_4d(values: &Vec<Vec<Vec<Vec<u16>>>>, axis: usize) -> Vec<Vec<Vec<u16>>> {
+// fn xor_along_axis_4d(values: &Vec<Vec<Vec<Vec<u16>>>>, axis: usize) -> Vec<Vec<Vec<u16>>> {
+//     let mut result: Vec<Vec<Vec<u16>>> = Vec::new();
+//     if axis == 0 {
+//         for i in 0..values[0].len() {
+//             let mut row = Vec::new();
+//             for j in 0..values[0][0].len() {
+//                 let mut col = Vec::new();
+//                 for k in 0..values[0][0][0].len() {
+//                     let mut res = values[0][i][j][k];
+//                     for l in 1..values.len() {
+//                         res ^= values[l][i][j][k];
+//                     }
+//                     col.push(res);
+//                 }
+//                 row.push(col);
+//             }
+//             result.push(row);
+//         }
+//     } else if axis == 1 {
+//         for i in 0..values.len() {
+//             let mut row = Vec::new();
+//             for j in 0..values[0][0].len() {
+//                 let mut col = Vec::new();
+//                 for k in 0..values[0][0][0].len() {
+//                     let mut res = values[i][0][j][k];
+//                     for l in 1..values[0].len() {
+//                         res ^= values[i][l][j][k];
+//                     }
+//                     col.push(res);
+//                 }
+//                 row.push(col);
+//             }
+//             result.push(row);
+//         }
+//     } else if axis == 2 {
+//         for i in 0..values.len() {
+//             let mut row = Vec::new();
+//             for j in 0..values[0].len() {
+//                 let mut col = Vec::new();
+//                 for k in 0..values[0][0][0].len() {
+//                     let mut res = values[i][j][0][k];
+//                     for l in 1..values[0][0].len() {
+//                         res ^= values[i][j][l][k];
+//                     }
+//                     col.push(res);
+//                 }
+//                 row.push(col);
+//             }
+//             result.push(row);
+//         }
+//     } else if axis == 3 {
+//         for i in 0..values.len() {
+//             let mut row = Vec::new();
+//             for j in 0..values[0].len() {
+//                 let mut col = Vec::new();
+//                 for k in 0..values[0][0].len() {
+//                     let mut res = values[i][j][k][0];
+//                     for l in 1..values[0][0][0].len() {
+//                         res ^= values[i][j][k][l];
+//                     }
+//                     col.push(res);
+//                 }
+//                 row.push(col);
+//             }
+//             result.push(row);
+//         }
+//     } else {
+//         panic!("Unsupported axis");
+//     }
+//     result
+// }
+
+/// Optimized XOR along a specified axis for 4D arrays
+pub fn xor_along_axis_4d(values: &Vec<Vec<Vec<Vec<u16>>>>, axis: usize) -> Vec<Vec<Vec<u16>>> {
     let mut result: Vec<Vec<Vec<u16>>> = Vec::new();
-    if axis == 0 {
-        for i in 0..values[0].len() {
-            let mut row = Vec::new();
-            for j in 0..values[0][0].len() {
-                let mut col = Vec::new();
-                for k in 0..values[0][0][0].len() {
-                    let mut res = values[0][i][j][k];
-                    for l in 1..values.len() {
-                        res ^= values[l][i][j][k];
+    let (dim1, dim2, dim3, dim4) = (
+        values.len(),
+        values[0].len(),
+        values[0][0].len(),
+        values[0][0][0].len(),
+    );
+
+    match axis {
+        0 => {
+            // XOR along the first dimension (dim1)
+            for i in 0..dim2 {
+                let mut row = Vec::new();
+                for j in 0..dim3 {
+                    let mut col = vec![0u16; dim4];
+
+                    #[cfg(target_feature = "sse2")]
+                    unsafe {
+                        let mut chunks = col.chunks_exact_mut(8);
+                        for chunk in chunks.by_ref() {
+                            // Load the first row into an SIMD register
+                            let mut res =
+                                _mm_loadu_si128(values[0][i][j][..8].as_ptr() as *const __m128i);
+                            // XOR with the remaining rows
+                            for l in 1..dim1 {
+                                let val = _mm_loadu_si128(
+                                    values[l][i][j][..8].as_ptr() as *const __m128i
+                                );
+                                res = _mm_xor_si128(res, val);
+                            }
+                            // Store the result back to the chunk
+                            _mm_storeu_si128(chunk.as_mut_ptr() as *mut __m128i, res);
+                        }
+                        // Process the remaining elements
+                        let remainder = chunks.into_remainder();
+                        for (k, rem) in remainder.iter_mut().enumerate() {
+                            *rem = values[0][i][j][k];
+                            for l in 1..dim1 {
+                                *rem ^= values[l][i][j][k];
+                            }
+                        }
                     }
-                    col.push(res);
-                }
-                row.push(col);
-            }
-            result.push(row);
-        }
-    } else if axis == 1 {
-        for i in 0..values.len() {
-            let mut row = Vec::new();
-            for j in 0..values[0][0].len() {
-                let mut col = Vec::new();
-                for k in 0..values[0][0][0].len() {
-                    let mut res = values[i][0][j][k];
-                    for l in 1..values[0].len() {
-                        res ^= values[i][l][j][k];
+
+                    #[cfg(not(target_feature = "sse2"))]
+                    {
+                        for k in 0..dim4 {
+                            let mut res = values[0][i][j][k];
+                            for l in 1..dim1 {
+                                res ^= values[l][i][j][k];
+                            }
+                            col[k] = res;
+                        }
                     }
-                    col.push(res);
+
+                    row.push(col);
                 }
-                row.push(col);
+                result.push(row);
             }
-            result.push(row);
         }
-    } else if axis == 2 {
-        for i in 0..values.len() {
-            let mut row = Vec::new();
-            for j in 0..values[0].len() {
-                let mut col = Vec::new();
-                for k in 0..values[0][0][0].len() {
-                    let mut res = values[i][j][0][k];
-                    for l in 1..values[0][0].len() {
-                        res ^= values[i][j][l][k];
+        1 => {
+            // XOR along the second dimension (dim2)
+            for i in 0..dim1 {
+                let mut row = Vec::new();
+                for j in 0..dim3 {
+                    let mut col = vec![0u16; dim4];
+
+                    #[cfg(target_feature = "sse2")]
+                    unsafe {
+                        let mut chunks = col.chunks_exact_mut(8);
+                        for chunk in chunks.by_ref() {
+                            let mut res =
+                                _mm_loadu_si128(values[i][0][j][..8].as_ptr() as *const __m128i);
+                            for l in 1..dim2 {
+                                let val = _mm_loadu_si128(
+                                    values[i][l][j][..8].as_ptr() as *const __m128i
+                                );
+                                res = _mm_xor_si128(res, val);
+                            }
+                            _mm_storeu_si128(chunk.as_mut_ptr() as *mut __m128i, res);
+                        }
+                        let remainder = chunks.into_remainder();
+                        for (k, rem) in remainder.iter_mut().enumerate() {
+                            *rem = values[i][0][j][k];
+                            for l in 1..dim2 {
+                                *rem ^= values[i][l][j][k];
+                            }
+                        }
                     }
-                    col.push(res);
-                }
-                row.push(col);
-            }
-            result.push(row);
-        }
-    } else if axis == 3 {
-        for i in 0..values.len() {
-            let mut row = Vec::new();
-            for j in 0..values[0].len() {
-                let mut col = Vec::new();
-                for k in 0..values[0][0].len() {
-                    let mut res = values[i][j][k][0];
-                    for l in 1..values[0][0][0].len() {
-                        res ^= values[i][j][k][l];
+
+                    #[cfg(not(target_feature = "sse2"))]
+                    {
+                        for k in 0..dim4 {
+                            let mut res = values[i][0][j][k];
+                            for l in 1..dim2 {
+                                res ^= values[i][l][j][k];
+                            }
+                            col[k] = res;
+                        }
                     }
-                    col.push(res);
+
+                    row.push(col);
                 }
-                row.push(col);
+                result.push(row);
             }
-            result.push(row);
         }
-    } else {
-        panic!("Unsupported axis");
+        2 => {
+            // XOR along the third dimension (dim3)
+            for i in 0..dim1 {
+                let mut row = Vec::new();
+                for j in 0..dim2 {
+                    let mut col = vec![0u16; dim4];
+
+                    #[cfg(target_feature = "sse2")]
+                    unsafe {
+                        let mut chunks = col.chunks_exact_mut(8);
+                        for chunk in chunks.by_ref() {
+                            let mut res =
+                                _mm_loadu_si128(values[i][j][0][..8].as_ptr() as *const __m128i);
+                            for l in 1..dim3 {
+                                let val = _mm_loadu_si128(
+                                    values[i][j][l][..8].as_ptr() as *const __m128i
+                                );
+                                res = _mm_xor_si128(res, val);
+                            }
+                            _mm_storeu_si128(chunk.as_mut_ptr() as *mut __m128i, res);
+                        }
+                        let remainder = chunks.into_remainder();
+                        for (k, rem) in remainder.iter_mut().enumerate() {
+                            *rem = values[i][j][0][k];
+                            for l in 1..dim3 {
+                                *rem ^= values[i][j][l][k];
+                            }
+                        }
+                    }
+
+                    #[cfg(not(target_feature = "sse2"))]
+                    {
+                        for k in 0..dim4 {
+                            let mut res = values[i][j][0][k];
+                            for l in 1..dim3 {
+                                res ^= values[i][j][l][k];
+                            }
+                            col[k] = res;
+                        }
+                    }
+
+                    row.push(col);
+                }
+                result.push(row);
+            }
+        }
+        3 => {
+            // XOR along the fourth dimension (dim4)
+            for i in 0..dim1 {
+                let mut row = Vec::new();
+                for j in 0..dim2 {
+                    let mut col = vec![0u16; dim3];
+
+                    for k in 0..dim3 {
+                        #[cfg(target_feature = "sse2")]
+                        unsafe {
+                            let mut res = _mm_setzero_si128();
+                            let mut chunks = values[i][j][k].chunks_exact(8);
+                            for chunk in chunks.by_ref() {
+                                let val = _mm_loadu_si128(chunk.as_ptr() as *const __m128i);
+                                res = _mm_xor_si128(res, val);
+                            }
+                            _mm_storeu_si128(col.as_mut_ptr() as *mut __m128i, res);
+                        }
+
+                        #[cfg(not(target_feature = "sse2"))]
+                        {
+                            let mut res = values[i][j][k][0];
+                            for l in 1..dim4 {
+                                res ^= values[i][j][k][l];
+                            }
+                            col[k] = res;
+                        }
+                    }
+                    row.push(col);
+                }
+                result.push(row);
+            }
+        }
+        _ => panic!("Unsupported axis"),
     }
+
     result
 }
 

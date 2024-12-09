@@ -387,101 +387,110 @@ Returns:
 // $n$  to cancel out the lower bits and then just discards the lower bits.
 
 pub fn big_mul(x1: u128, x2: u128) -> u128 {
+    // Main function that multiplies two 128-bit integers `x1` and `x2` using the Montgomery multiplication.
+    // The actual implementation depends on the platform: aarch64, x86_64 with CLMUL, or a portable fallback.
     montgomery_multiply(x1, x2)
 }
 
 #[inline]
 fn montgomery_multiply(a: u128, b: u128) -> u128 {
+    #[cfg(target_arch = "aarch64")]
     unsafe {
+        // aarch64 implementation using NEON instructions.
+        // Step 1: Decompose inputs into high, mid, and low components using Karatsuba's method.
         let h = vreinterpretq_u8_p128(a);
         let y = vreinterpretq_u8_p128(b);
         let (h, m, l) = karatsuba1(h, y);
+
+        // Step 2: Combine the results from Karatsuba decomposition.
         let (h, l) = karatsuba2(h, m, l);
+
+        // Step 3: Apply Montgomery reduction to get the final result.
         vreinterpretq_p128_u8(mont_reduce(h, l))
+    }
+
+    #[cfg(all(target_arch = "x86_64", target_feature = "pclmulqdq"))]
+    unsafe {
+        // x86_64 implementation using CLMUL instructions.
+        // Step 1: Convert 128-bit integers to two 64-bit halves for SIMD processing.
+        let a = _mm_set_epi64x((a >> 64) as i64, (a & 0xFFFF_FFFF_FFFF_FFFF) as i64);
+        let b = _mm_set_epi64x((b >> 64) as i64, (b & 0xFFFF_FFFF_FFFF_FFFF) as i64);
+
+        // Step 2: Perform Karatsuba decomposition to get high, mid, and low parts.
+        let (h, m, l) = karatsuba1_x86(a, b);
+
+        // Step 3: Combine the results using Karatsuba combine logic.
+        let (h, l) = karatsuba2_x86(h, m, l);
+
+        // Step 4: Apply Montgomery reduction using CLMUL to finalize the result.
+        mont_reduce_x86(h, l)
+    }
+
+    #[cfg(not(any(
+        target_arch = "aarch64",
+        all(target_arch = "x86_64", target_feature = "pclmulqdq")
+    )))]
+    {
+        // Portable fallback implementation using basic arithmetic.
+        // Split the 128-bit integers into high and low 64-bit halves.
+        let l = (a & 0xFFFF_FFFF_FFFF_FFFF) * (b & 0xFFFF_FFFF_FFFF_FFFF); // Low part
+        let h = (a >> 64) * (b >> 64); // High part
+        let mid = ((a & 0xFFFF_FFFF_FFFF_FFFF) + (a >> 64))
+            * ((b & 0xFFFF_FFFF_FFFF_FFFF) + (b >> 64))
+            - l
+            - h; // Middle terms
+        l ^ (mid << 64) ^ h // Combine the results into the final 128-bit value.
     }
 }
 
-/// Karatsuba decomposition for `x*y`.
+// aarch64 implementation using NEON instructions
+#[cfg(target_arch = "aarch64")]
+/// Karatsuba decomposition for `x * y` on aarch64.
+/// Decomposes the inputs into high, mid, and low components for efficient multiplication.
 #[inline]
 unsafe fn karatsuba1(x: uint8x16_t, y: uint8x16_t) -> (uint8x16_t, uint8x16_t, uint8x16_t) {
-    // First Karatsuba step: decompose x and y.
-    //
-    // (x1*y0 + x0*y1) = (x1+x0) * (y1+x0) + (x1*y1) + (x0*y0)
-    //        M                                 H         L
-    //
-    // m = x.hi^x.lo * y.hi^y.lo
-    // let z3 = big_mul_impl(
-    //     &l1.iter().zip(r1.iter()).map(|(a, b)| a ^ b).collect(),
-    //     &l2.iter().zip(r2.iter()).map(|(a, b)| a ^ b).collect(),
-    // );
     let m = pmull(
-        veorq_u8(x, vextq_u8(x, x, 8)), // x.hi^x.lo
-        veorq_u8(y, vextq_u8(y, y, 8)), // y.hi^y.lo
-    );
-    // let l1l2 = big_mul_impl(&l1.to_vec(), &l2.to_vec());
-    let h = pmull2(x, y); // h = x.hi * y.hi
-                          // r1r2 = big_mul_impl(&r1.to_vec(), &r2.to_vec());
-    let l = pmull(x, y); // l = x.lo * y.lo
+        veorq_u8(x, vextq_u8(x, x, 8)),
+        veorq_u8(y, vextq_u8(y, y, 8)),
+    ); // Mid part
+    let h = pmull2(x, y); // High part
+    let l = pmull(x, y); // Low part
     (h, m, l)
 }
 
-/// Karatsuba combine.
+#[cfg(target_arch = "aarch64")]
+/// Karatsuba combine for aarch64.
+/// Combines the high, mid, and low components into two final components.
 #[inline]
 unsafe fn karatsuba2(h: uint8x16_t, m: uint8x16_t, l: uint8x16_t) -> (uint8x16_t, uint8x16_t) {
-    // Second Karatsuba step: combine into a 2n-bit product.
-    //
-    // m0 ^= l0 ^ h0 // = m0^(l0^h0)
-    // m1 ^= l1 ^ h1 // = m1^(l1^h1)
-    // l1 ^= m0      // = l1^(m0^l0^h0)
-    // h0 ^= l0 ^ m1 // = h0^(l0^m1^l1^h1)
-    // h1 ^= l1      // = h1^(l1^m0^l0^h0)
-    let t = {
-        //   {m0, m1} ^ {l1, h0}
-        // = {m0^l1, m1^h0}
-        let t0 = veorq_u8(m, vextq_u8(l, h, 8));
-
-        //   {h0, h1} ^ {l0, l1}
-        // = {h0^l0, h1^l1}
-        let t1 = veorq_u8(h, l);
-
-        //   {m0^l1, m1^h0} ^ {h0^l0, h1^l1}
-        // = {m0^l1^h0^l0, m1^h0^h1^l1}
-        veorq_u8(t0, t1)
-    };
-
-    // {m0^l1^h0^l0, l0}
-    let x01 = vextq_u8(
-        vextq_u8(l, l, 8), // {l1, l0}
-        t,
-        8,
-    );
-
-    // {h1, m1^h0^h1^l1}
-    let x23 = vextq_u8(
-        t,
-        vextq_u8(h, h, 8), // {h1, h0}
-        8,
-    );
-
+    let t = veorq_u8(veorq_u8(h, l), m); // Intermediate term
+    let x01 = vextq_u8(vextq_u8(l, l, 8), t, 8); // Low result
+    let x23 = vextq_u8(t, vextq_u8(h, h, 8), 8); // High result
     (x23, x01)
 }
 
+#[cfg(target_arch = "aarch64")]
+/// Montgomery reduction for aarch64.
+/// Performs modular reduction to ensure the result is in the correct field.
 #[inline]
-unsafe fn mont_reduce(x23: uint8x16_t, x01: uint8x16_t) -> uint8x16_t {
-    // Perform the Montgomery reduction over the 256-bit X.
-    //    [A1:A0] = X0 • poly
-    //    [B1:B0] = [X0 ⊕ A1 : X1 ⊕ A0]
-    //    [C1:C0] = B0 • poly
-    //    [D1:D0] = [B0 ⊕ C1 : B1 ⊕ C0]
-    // Output: [D1 ⊕ X3 : D0 ⊕ X2]
-    let poly = vreinterpretq_u8_p128(1 << 127 | 1 << 126 | 1 << 121 | 1 << 63 | 1 << 62 | 1 << 57);
-    let a = pmull(x01, poly);
-    let b = veorq_u8(x01, vextq_u8(a, a, 8));
+unsafe fn mont_reduce(h: uint8x16_t, l: uint8x16_t) -> uint8x16_t {
+    // Polynomial used for the field reduction
+    let poly = vreinterpretq_u8_p128(0x1B);
+
+    // Perform the first step of reduction
+    let a = pmull(l, poly);
+
+    // XOR with the shifted result to mix terms
+    let b = veorq_u8(l, vextq_u8(a, a, 8));
+
+    // Perform the second step of reduction
     let c = pmull2(b, poly);
-    veorq_u8(x23, veorq_u8(c, b))
+
+    // Final XOR to combine all components into a reduced result
+    veorq_u8(h, veorq_u8(c, b))
 }
 
-/// Multiplies the low bits in `a` and `b`.
+#[cfg(target_arch = "aarch64")]
 #[inline]
 unsafe fn pmull(a: uint8x16_t, b: uint8x16_t) -> uint8x16_t {
     mem::transmute(vmull_p64(
@@ -490,13 +499,53 @@ unsafe fn pmull(a: uint8x16_t, b: uint8x16_t) -> uint8x16_t {
     ))
 }
 
-/// Multiplies the high bits in `a` and `b`.
+#[cfg(target_arch = "aarch64")]
 #[inline]
 unsafe fn pmull2(a: uint8x16_t, b: uint8x16_t) -> uint8x16_t {
     mem::transmute(vmull_p64(
         vgetq_lane_u64(vreinterpretq_u64_u8(a), 1),
         vgetq_lane_u64(vreinterpretq_u64_u8(b), 1),
     ))
+}
+
+// x86 implementation using CLMUL instructions
+#[cfg(all(target_arch = "x86_64", target_feature = "pclmulqdq"))]
+/// Karatsuba decomposition for `x * y` on x86_64.
+/// Decomposes the inputs into high, mid, and low components for efficient multiplication.
+#[inline]
+unsafe fn karatsuba1_x86(x: __m128i, y: __m128i) -> (__m128i, __m128i, __m128i) {
+    let m = _mm_clmulepi64_si128(
+        _mm_xor_si128(x, _mm_shuffle_epi32(x, 0x4E)), // x.hi ^ x.lo
+        _mm_xor_si128(y, _mm_shuffle_epi32(y, 0x4E)), // y.hi ^ y.lo
+        0x00,
+    );
+    let h = _mm_clmulepi64_si128(x, y, 0x11); // High part
+    let l = _mm_clmulepi64_si128(x, y, 0x00); // Low part
+    (h, m, l)
+}
+
+#[cfg(all(target_arch = "x86_64", target_feature = "pclmulqdq"))]
+/// Karatsuba combine for x86_64.
+/// Combines the high, mid, and low components into two final components.
+#[inline]
+unsafe fn karatsuba2_x86(h: __m128i, m: __m128i, l: __m128i) -> (__m128i, __m128i) {
+    let t = _mm_xor_si128(_mm_xor_si128(h, l), m); // Intermediate term
+    let x01 = _mm_alignr_epi8(l, t, 8); // Low result
+    let x23 = _mm_alignr_epi8(t, h, 8); // High result
+    (x23, x01)
+}
+
+#[cfg(all(target_arch = "x86_64", target_feature = "pclmulqdq"))]
+/// Montgomery reduction for x86_64 using CLMUL.
+/// Performs modular reduction to ensure the result is in the correct field.
+#[inline]
+unsafe fn mont_reduce_x86(h: __m128i, l: __m128i) -> u128 {
+    let poly = _mm_set_epi64x(0, 0x1B); // Polynomial for the field
+    let a = _mm_clmulepi64_si128(l, poly, 0x00); // First partial reduction
+    let b = _mm_xor_si128(l, _mm_shuffle_epi32(a, 0x4E)); // Combine results
+    let c = _mm_clmulepi64_si128(b, poly, 0x11); // Second partial reduction
+    let reduced = _mm_xor_si128(h, _mm_xor_si128(c, b)); // Final result
+    _mm_extract_epi64(reduced, 0) as u128 | ((_mm_extract_epi64(reduced, 1) as u128) << 64)
 }
 
 /** Multiply a big binary number by Xi

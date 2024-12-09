@@ -4,15 +4,17 @@ const PACKING_FACTOR: usize = 16;
 
 use std::str;
 
-use crate::simd::binary_field16_simd::int_to_bigbin;
+use crate::simd::binary_field16_simd_gfni_x86::int_to_bigbin;
 
 use super::merkle_tree::get_branch;
 use p3_util::log2_strict_usize;
 
-use super::binary_field16_simd::{big_mul, uint16_to_bit, uint16s_to_bits, BinaryFieldElement16};
+use super::binary_field16_simd_gfni_x86::{
+    big_mul, uint16_to_bit, uint16s_to_bits, BinaryFieldElement16,
+};
 use super::challenger::get_challenges;
 use super::merkle_tree::{get_root, merkelize, verify_branch};
-use super::utils::{
+use super::utils_gfni::{
     choose_row_length_and_count, computed_tprimes, evaluation_tensor_product, extend_rows,
     multisubset, pack_row, pack_rows, transpose, transpose_3d, transpose_bits, xor_along_axis,
 };

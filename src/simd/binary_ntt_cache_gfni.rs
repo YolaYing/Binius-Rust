@@ -11,6 +11,8 @@
 //! 3. build big mul cache(not work)
 
 use super::binary_field16_simd_gfni_x86::BinaryFieldElement16 as B16;
+#[cfg(target_arch = "x86_64")]
+use core::arch::x86_64::*;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -143,7 +145,38 @@ Appendix: page 4-5 of https://arxiv.org/pdf/1802.03932
 // }
 
 // Optimized iterative version: save 46% of the time
-fn additive_ntt(vals: &Vec<B16>, start: usize) -> Vec<B16> {
+// fn additive_ntt(vals: &Vec<B16>, start: usize) -> Vec<B16> {
+//     let mut results = vals.clone();
+//     let size = results.len();
+//     let mut step = size;
+
+//     while step >= 2 {
+//         step >>= 1;
+//         let halflen = step;
+
+//         for i in (0..size).step_by(step * 2) {
+//             let coeff1 = {
+//                 let wi_eval_cache = WI_EVAL_CACHE.lock().unwrap();
+//                 wi_eval_cache.get_Wi_eval((halflen as f64).log2() as usize, (start + i) as u16)
+//             };
+
+//             for j in 0..halflen {
+//                 let l = results[i + j];
+//                 let r = results[i + j + halflen];
+//                 let sub_input1 = l + r * coeff1;
+//                 results[i + j] = sub_input1;
+//                 results[i + j + halflen] = sub_input1 + r;
+//             }
+//         }
+//     }
+
+//     results
+// }
+#[cfg(target_arch = "x86_64")]
+use core::arch::x86_64::*;
+
+/// Optimized additive_ntt using GFNI
+pub fn additive_ntt(vals: &Vec<B16>, start: usize) -> Vec<B16> {
     let mut results = vals.clone();
     let size = results.len();
     let mut step = size;
@@ -158,17 +191,51 @@ fn additive_ntt(vals: &Vec<B16>, start: usize) -> Vec<B16> {
                 wi_eval_cache.get_Wi_eval((halflen as f64).log2() as usize, (start + i) as u16)
             };
 
-            for j in 0..halflen {
-                let l = results[i + j];
-                let r = results[i + j + halflen];
-                let sub_input1 = l + r * coeff1;
-                results[i + j] = sub_input1;
-                results[i + j + halflen] = sub_input1 + r;
+            #[cfg(all(target_arch = "x86_64", target_feature = "gfni"))]
+            unsafe {
+                vectorized_ntt_layer(&mut results[i..i + step * 2], coeff1);
+            }
+
+            #[cfg(not(all(target_arch = "x86_64", target_feature = "gfni")))]
+            {
+                fallback_ntt_layer(&mut results[i..i + step * 2], coeff1);
             }
         }
     }
 
     results
+}
+
+/// Vectorized NTT layer using GFNI
+#[cfg(all(target_arch = "x86_64", target_feature = "gfni"))]
+unsafe fn vectorized_ntt_layer(chunk: &mut [B16], coeff1: B16) {
+    let coeff_vec = _mm_set1_epi64x(coeff1.0 as i64);
+
+    chunk.chunks_exact_mut(2).for_each(|pair| {
+        let l = _mm_set1_epi64x(pair[0].0 as i64);
+        let r = _mm_set1_epi64x(pair[1].0 as i64);
+
+        let r_twiddled = _mm_gf2p8mul_epi8(r, coeff_vec);
+        let sub_input1 = _mm_xor_si128(l, r_twiddled);
+
+        pair[0] = B16(_mm_extract_epi64(sub_input1, 0) as u16);
+        pair[1] = B16(pair[0].0 ^ pair[1].0);
+    });
+}
+
+#[cfg(not(all(target_arch = "x86_64", target_feature = "gfni")))]
+/// Fallback NTT layer without GFNI
+fn fallback_ntt_layer(chunk: &mut [B16], coeff1: B16) {
+    let halflen = chunk.len() / 2;
+
+    for j in 0..halflen {
+        let l = chunk[j];
+        let r = chunk[j + halflen];
+        let r_twiddled = r * coeff1;
+
+        chunk[j] = l + r_twiddled;
+        chunk[j + halflen] = chunk[j] + r;
+    }
 }
 
 /** inverse additive ntt: Converts evaluations into a polynomial with coefficients
@@ -210,7 +277,40 @@ Returns:
 // }
 
 // Optimized iterative version: save 15% of the time
-fn inv_additive_ntt(vals: &Vec<B16>, start: usize) -> Vec<B16> {
+// fn inv_additive_ntt(vals: &Vec<B16>, start: usize) -> Vec<B16> {
+//     let size = vals.len();
+//     if size == 1 {
+//         return vals.clone();
+//     }
+
+//     let mut results = vals.clone();
+//     let mut step = 1;
+//     while step < size {
+//         let halflen = step;
+//         step <<= 1;
+
+//         for i in (0..size).step_by(step) {
+//             // 获取系数
+//             let coeff1 = {
+//                 let wi_eval_cache = WI_EVAL_CACHE.lock().unwrap();
+//                 wi_eval_cache.get_Wi_eval((halflen as f64).log2() as usize, (start + i) as u16)
+//             };
+//             let coeff2 = coeff1 + B16::new(1);
+
+//             for j in 0..halflen {
+//                 let l = results[i + j];
+//                 let r = results[i + j + halflen];
+//                 let sub_input1 = l * coeff2 + r * coeff1;
+//                 let sub_input2 = l + r;
+//                 results[i + j] = sub_input1;
+//                 results[i + j + halflen] = sub_input2;
+//             }
+//         }
+//     }
+
+//     results
+// }
+pub fn inv_additive_ntt(vals: &Vec<B16>, start: usize) -> Vec<B16> {
     let size = vals.len();
     if size == 1 {
         return vals.clone();
@@ -223,25 +323,60 @@ fn inv_additive_ntt(vals: &Vec<B16>, start: usize) -> Vec<B16> {
         step <<= 1;
 
         for i in (0..size).step_by(step) {
-            // 获取系数
             let coeff1 = {
                 let wi_eval_cache = WI_EVAL_CACHE.lock().unwrap();
                 wi_eval_cache.get_Wi_eval((halflen as f64).log2() as usize, (start + i) as u16)
             };
             let coeff2 = coeff1 + B16::new(1);
 
-            for j in 0..halflen {
-                let l = results[i + j];
-                let r = results[i + j + halflen];
-                let sub_input1 = l * coeff2 + r * coeff1;
-                let sub_input2 = l + r;
-                results[i + j] = sub_input1;
-                results[i + j + halflen] = sub_input2;
+            #[cfg(all(target_arch = "x86_64", target_feature = "gfni"))]
+            unsafe {
+                vectorized_inv_ntt_layer(&mut results[i..i + step], coeff1, coeff2);
+            }
+
+            #[cfg(not(all(target_arch = "x86_64", target_feature = "gfni")))]
+            {
+                fallback_inv_ntt_layer(&mut results[i..i + step], coeff1, coeff2);
             }
         }
     }
 
     results
+}
+
+/// Vectorized inverse NTT layer using GFNI
+#[cfg(all(target_arch = "x86_64", target_feature = "gfni"))]
+unsafe fn vectorized_inv_ntt_layer(chunk: &mut [B16], coeff1: B16, coeff2: B16) {
+    let coeff1_vec = _mm_set1_epi64x(coeff1.0 as i64);
+    let coeff2_vec = _mm_set1_epi64x(coeff2.0 as i64);
+
+    chunk.chunks_exact_mut(2).for_each(|pair| {
+        let l = _mm_set1_epi64x(pair[0].0 as i64);
+        let r = _mm_set1_epi64x(pair[1].0 as i64);
+
+        let sub_input1 = _mm_xor_si128(
+            _mm_gf2p8mul_epi8(l, coeff2_vec),
+            _mm_gf2p8mul_epi8(r, coeff1_vec),
+        );
+        let sub_input2 = _mm_xor_si128(l, r);
+
+        pair[0] = B16(_mm_extract_epi64(sub_input1, 0) as u16);
+        pair[1] = B16(_mm_extract_epi64(sub_input2, 0) as u16);
+    });
+}
+
+#[cfg(not(all(target_arch = "x86_64", target_feature = "gfni")))]
+/// Fallback inverse NTT layer without GFNI
+fn fallback_inv_ntt_layer(chunk: &mut [B16], coeff1: B16, coeff2: B16) {
+    let halflen = chunk.len() / 2;
+
+    for j in 0..halflen {
+        let l = chunk[j];
+        let r = chunk[j + halflen];
+
+        chunk[j] = l * coeff2 + r * coeff1;
+        chunk[j + halflen] = l + r;
+    }
 }
 
 /** Reed-Solomon extension, using the efficient algorithms above
